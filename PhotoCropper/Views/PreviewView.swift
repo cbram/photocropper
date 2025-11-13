@@ -23,17 +23,49 @@ struct PreviewView: View {
             if let image = image {
                 GeometryReader { geometry in
                     let previewSize = calculatePreviewSize(in: geometry.size)
+                    let currentRatio = cropBox.width / cropBox.height
+                    let targetRatioValue = targetRatio.value
+                    let deviation = abs(currentRatio - targetRatioValue)
                     
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: previewSize.width, height: previewSize.height)
-                        .clipped()
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color.red, lineWidth: 2)
-                                .frame(width: previewSize.width, height: previewSize.height)
-                        )
+                    ZStack {
+                        // Bild-Preview
+                        Image(nsImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: previewSize.width, height: previewSize.height)
+                            .clipped()
+                        
+                        // Zielformat-Overlay (gestrichelt)
+                        Rectangle()
+                            .stroke(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                            .foregroundColor(Color.green.opacity(0.8))
+                            .frame(width: previewSize.width, height: previewSize.height)
+                        
+                        // Aktuelles Format (rot, durchgezogen)
+                        Rectangle()
+                            .stroke(Color.red, lineWidth: 2)
+                            .frame(
+                                width: previewSize.width,
+                                height: previewSize.width / CGFloat(currentRatio)
+                            )
+                        
+                        // Abweichungs-Indikator
+                        if deviation > 0.01 {
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    Spacer()
+                                    Text(String(format: "Δ %.2f%%", deviation / targetRatioValue * 100))
+                                        .font(.caption2)
+                                        .foregroundColor(.white)
+                                        .padding(4)
+                                        .background(Color.orange.opacity(0.8))
+                                        .cornerRadius(4)
+                                        .padding(4)
+                                }
+                            }
+                        }
+                    }
                 }
                 .frame(height: 150)
             } else {
@@ -46,9 +78,32 @@ struct PreviewView: View {
                     )
             }
             
-            Text("Final: \(Int(cropBox.width))x\(Int(cropBox.height))")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            // Ratio-Vergleich
+            let currentRatio = cropBox.width / cropBox.height
+            let targetRatioValue = targetRatio.value
+            HStack {
+                Text("Aktuell: \(Int(cropBox.width))×\(Int(cropBox.height))")
+                    .font(.caption)
+                    .foregroundColor(abs(currentRatio - targetRatioValue) < 0.01 ? .green : .orange)
+                Spacer()
+                Text(String(format: "%.2f:1", currentRatio))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.caption2)
+                Text("Grün = Zielformat")
+                Spacer()
+                Image(systemName: "square")
+                    .foregroundColor(.red)
+                    .font(.caption2)
+                Text("Rot = Aktuell")
+            }
+            .font(.caption2)
+            .foregroundColor(.secondary)
         }
         .padding()
     }

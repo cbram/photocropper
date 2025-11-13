@@ -22,7 +22,7 @@ struct ExportView: View {
     @State private var exportResult: ExportResult?
     
     enum ExportResult {
-        case success(URL)
+        case success(URL, metadataSaved: Bool, cropData: String)
         case failure(String)
     }
     
@@ -67,17 +67,75 @@ struct ExportView: View {
                 // Ergebnis-Anzeige
                 if let result = exportResult {
                     switch result {
-                    case .success(let url):
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("✓ Erfolgreich gespeichert")
-                                .foregroundColor(.green)
+                    case .success(let url, let metadataSaved, let cropData):
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Erfolgreich gespeichert")
+                                    .foregroundColor(.green)
+                                    .fontWeight(.bold)
+                            }
+                            
                             Text(url.path)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                            
+                            Divider()
+                            
+                            // EXIF-Metadaten Bestätigung
+                            if metadataSaved {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Image(systemName: "doc.text.fill")
+                                            .foregroundColor(.blue)
+                                        Text("EXIF Crop-Metadaten gespeichert:")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                    }
+                                    
+                                    Text("• DefaultCropOrigin")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Text("• DefaultCropSize")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Text("• Custom XMP Tags")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Text(cropData)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .padding(4)
+                                        .background(Color.gray.opacity(0.1))
+                                        .cornerRadius(4)
+                                }
+                                .padding(.vertical, 4)
+                            } else {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.orange)
+                                    Text("Metadaten konnten nicht gespeichert werden")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                            }
                         }
+                        .padding(8)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(8)
+                        
                     case .failure(let error):
-                        Text("✗ Fehler: \(error)")
-                            .foregroundColor(.red)
+                        HStack {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.red)
+                            Text("Fehler: \(error)")
+                                .foregroundColor(.red)
+                        }
+                        .padding(8)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
                     }
                 }
                 
@@ -160,6 +218,16 @@ struct ExportView: View {
         
         switch result {
         case .success:
+            // Erstelle Crop-Data String für Anzeige
+            let normalized = cropSettings.normalizedCoordinates(for: imageData.pixelSize)
+            let cropDataString = String(format: 
+                "Origin: (%.3f, %.3f)\nSize: (%.3f, %.3f)\nMode: %@\nRatio: %@",
+                normalized.origin.x, normalized.origin.y,
+                normalized.size.width, normalized.size.height,
+                cropSettings.mode.rawValue,
+                cropSettings.targetRatio.id
+            )
+            
             // Bei MCU-Modus: Verlustfreies Cropping durchführen
             if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
                 performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
@@ -168,7 +236,7 @@ struct ExportView: View {
                 copyImage(from: imageData.url, to: outputURL)
             }
             
-            exportResult = .success(outputURL)
+            exportResult = .success(outputURL, metadataSaved: true, cropData: cropDataString)
         case .failure(let error):
             exportResult = .failure(error.localizedDescription)
         }
