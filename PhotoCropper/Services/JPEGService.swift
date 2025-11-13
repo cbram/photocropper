@@ -105,16 +105,34 @@ class JPEGService {
         
         // posix_spawn benötigt C-Arrays - DIREKT jpegtran aufrufen
         var pid: pid_t = 0
+        
+        // Debug: Zeige alle Argumente
+        let argStrings = [
+            jpegtranPath,
+            "-crop",
+            cropArg,
+            "-copy",
+            "all",
+            imageURL.path,
+            "-outfile",
+            outputURL.path
+        ]
+        
+        print("📋 argv-Liste:")
+        for (index, arg) in argStrings.enumerated() {
+            print("  argv[\(index)] = \"\(arg)\"")
+        }
+        
         let argv: [UnsafeMutablePointer<CChar>?] = [
-            strdup(jpegtranPath),              // Executable selbst
-            strdup("-crop"),
-            strdup(cropArg),
-            strdup("-copy"),
-            strdup("all"),
-            strdup(imageURL.path),             // Input file
-            strdup("-outfile"),
-            strdup(outputURL.path),            // Output file
-            nil
+            strdup(jpegtranPath),              // argv[0] = Executable selbst
+            strdup("-crop"),                   // argv[1]
+            strdup(cropArg),                   // argv[2]
+            strdup("-copy"),                   // argv[3]
+            strdup("all"),                     // argv[4]
+            strdup(imageURL.path),             // argv[5] = Input file
+            strdup("-outfile"),                // argv[6]
+            strdup(outputURL.path),            // argv[7] = Output file
+            nil                                // argv[8] = NULL terminator
         ]
         
         let envp: [UnsafeMutablePointer<CChar>?] = [
