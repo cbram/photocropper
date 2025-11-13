@@ -89,16 +89,16 @@ class CropEngine {
     static func validateCropBox(_ cropBox: CGRect, imageSize: CGSize) -> CGRect {
         var validated = cropBox
         
-        // X-Position begrenzen
-        validated.origin.x = max(0, min(validated.origin.x, imageSize.width - validated.width))
+        // Erst Größe begrenzen (max. Bildgröße)
+        validated.size.width = max(1, min(validated.size.width, imageSize.width))
+        validated.size.height = max(1, min(validated.size.height, imageSize.height))
         
-        // Y-Position begrenzen
+        // Dann Position begrenzen (muss innerhalb Bildgrenzen sein)
+        validated.origin.x = max(0, min(validated.origin.x, imageSize.width - validated.width))
         validated.origin.y = max(0, min(validated.origin.y, imageSize.height - validated.height))
         
-        // Breite begrenzen
+        // Finale Größen-Prüfung (falls Position am Rand ist)
         validated.size.width = min(validated.size.width, imageSize.width - validated.origin.x)
-        
-        // Höhe begrenzen
         validated.size.height = min(validated.size.height, imageSize.height - validated.origin.y)
         
         return validated
