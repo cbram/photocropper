@@ -318,6 +318,11 @@ class CropCanvasView: NSView {
         let location = convert(event.locationInWindow, from: nil)
         let delta = CGPoint(x: location.x - dragStartPoint.x, y: location.y - dragStartPoint.y)
         
+        // Debug: Aspect Ratio aktiv?
+        if handle != .center, let ratio = targetAspectRatio {
+            print("🔒 Aspect Ratio Lock aktiv: \(ratio)")
+        }
+        
         // Bild-Rect für Koordinaten-Umrechnung
         let imageRect = calculateImageRect()
         let scaleX = imageSize.width / imageRect.width
@@ -422,16 +427,17 @@ class CropCanvasView: NSView {
         newCropBox = CropEngine.validateCropBox(newCropBox, imageSize: imageSize)
         
         // Bei Kanten/Ecken-Drag: Signal für Custom-Ratio senden
-        if handle != .center {
+        // ABER NUR wenn kein targetAspectRatio gesetzt ist (sonst würden wir das Lock aufheben!)
+        if handle != .center && targetAspectRatio == nil {
             onRatioChanged?()
         }
         
         cropBox = newCropBox
-        onCropBoxChanged?(cropBox)
         
-        // Throttle Display-Updates für flüssigeres Dragging
+        // Throttle Display-Updates UND Callbacks für flüssigeres Dragging
         let now = Date()
         if now.timeIntervalSince(lastDisplayUpdate) >= displayThrottleInterval {
+            onCropBoxChanged?(cropBox)
             needsDisplay = true
             lastDisplayUpdate = now
         }
@@ -440,7 +446,8 @@ class CropCanvasView: NSView {
     override func mouseUp(with event: NSEvent) {
         isDragging = false
         dragHandle = nil
-        // Final display update nach Drag-Ende
+        // Final display update UND Callback nach Drag-Ende
+        onCropBoxChanged?(cropBox)
         needsDisplay = true
     }
     

@@ -101,6 +101,44 @@ struct ControlsView: View {
                             .frame(width: 60)
                     }
                     .disabled(imageSize.height <= cropBox.height)
+                    
+                    HStack {
+                        Text("Breite:")
+                        Slider(value: Binding(
+                            get: { cropBox.width },
+                            set: { newValue in
+                                cropBox.size.width = max(1, min(newValue, imageSize.width))
+                                // Wenn Aspect Ratio gesperrt, Höhe anpassen
+                                if case .custom = targetRatio {
+                                    // Bei custom: Nichts tun
+                                } else {
+                                    let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
+                                    cropBox.size.height = cropBox.size.width / ratio
+                                }
+                            }
+                        ), in: 1...imageSize.width)
+                        Text("\(Int(cropBox.width))")
+                            .frame(width: 60)
+                    }
+                    
+                    HStack {
+                        Text("Höhe:")
+                        Slider(value: Binding(
+                            get: { cropBox.height },
+                            set: { newValue in
+                                cropBox.size.height = max(1, min(newValue, imageSize.height))
+                                // Wenn Aspect Ratio gesperrt, Breite anpassen
+                                if case .custom = targetRatio {
+                                    // Bei custom: Nichts tun
+                                } else {
+                                    let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
+                                    cropBox.size.width = cropBox.size.height * ratio
+                                }
+                            }
+                        ), in: 1...imageSize.height)
+                        Text("\(Int(cropBox.height))")
+                            .frame(width: 60)
+                    }
                 }
                 
                 Toggle("MCU-Grid anzeigen", isOn: $showMCUGrid)
