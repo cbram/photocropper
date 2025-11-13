@@ -12,7 +12,7 @@ import CoreGraphics
 /// Service für Metadaten-Operationen (EXIF/XMP)
 class MetadataService {
     
-    /// Speichert Crop-Metadaten in Bild-Datei
+    /// Speichert Crop-Metadaten in Bild-Datei mit exiftool (verlustfrei!)
     static func saveCropMetadata(
         imageURL: URL,
         cropBox: CGRect,
@@ -21,6 +21,134 @@ class MetadataService {
         mode: CropMode,
         originalRatio: String
     ) -> Result<Void, Error> {
+        
+        // Prüfe ob exiftool verfügbar ist
+        let exiftoolPaths = [
+            "/opt/homebrew/bin/exiftool",
+            "/usr/local/bin/exiftool",
+            "/usr/bin/exiftool"
+        ]
+        
+        guard let exiftoolPath = exiftoolPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            print("⚠️ exiftool nicht gefunden - Fallback zu ImageIO")
+            return saveCropMetadataWithImageIO(
+                imageURL: imageURL,
+                cropBox: cropBox,
+                imageSize: imageSize,
+                targetRatio: targetRatio,
+                mode: mode,
+                originalRatio: originalRatio
+            )
+        }
+        
+        return saveCropMetadataWithExiftool(
+            exiftoolPath: exiftoolPath,
+            imageURL: imageURL,
+            cropBox: cropBox,
+            imageSize: imageSize,
+            targetRatio: targetRatio,
+            mode: mode,
+            originalRatio: originalRatio
+        )
+    }
+    
+    /// Speichert Crop-Metadaten mit exiftool (verlustfrei, keine Bildveränderung!)
+    private static func saveCropMetadataWithExiftool(
+        exiftoolPath: String,
+        imageURL: URL,
+        cropBox: CGRect,
+        imageSize: CGSize,
+        targetRatio: AspectRatio,
+        mode: CropMode,
+        originalRatio: String
+    ) -> Result<Void, Error> {
+        
+        print("📊 Metadaten-Service (exiftool):")
+        print("  exiftool: \(exiftoolPath)")
+        print("  Image: \(imageURL.lastPathComponent)")
+        print("  Size: \(imageSize.width)x\(imageSize.height)")
+        print("  Crop: \(cropBox)")
+        
+        // Normalisierte Koordinaten berechnen
+        let normalizedOrigin = CGPoint(
+            x: cropBox.origin.x / imageSize.width,
+            y: cropBox.origin.y / imageSize.height
+        )
+        let normalizedSize = CGSize(
+            width: cropBox.width / imageSize.width,
+            height: cropBox.height / imageSize.height
+        )
+        
+        let cropBottom = normalizedOrigin.y + normalizedSize.height
+        let cropRight = normalizedOrigin.x + normalizedSize.width
+        
+        print("  Normalized: origin=(\(normalizedOrigin.x), \(normalizedOrigin.y)) size=(\(normalizedSize.width), \(normalizedSize.height))")
+        
+        // exiftool Kommando zusammenstellen
+        var pid: pid_t = 0
+        let argv: [UnsafeMutablePointer<CChar>?] = [
+            strdup(exiftoolPath),
+            strdup("-overwrite_original"),  // Kein _original Backup
+            strdup("-n"),  // Numeric mode (keine Formatierung)
+            // EXIF Tags
+            strdup("-EXIF:DefaultCropOriginX=\(normalizedOrigin.x)"),
+            strdup("-EXIF:DefaultCropOriginY=\(normalizedOrigin.y)"),
+            strdup("-EXIF:DefaultCropSizeWidth=\(normalizedSize.width)"),
+            strdup("-EXIF:DefaultCropSizeHeight=\(normalizedSize.height)"),
+            // XMP Tags (Adobe-kompatibel)
+            strdup("-XMP:CropTop=\(normalizedOrigin.y)"),
+            strdup("-XMP:CropLeft=\(normalizedOrigin.x)"),
+            strdup("-XMP:CropBottom=\(cropBottom)"),
+            strdup("-XMP:CropRight=\(cropRight)"),
+            // Custom Tags
+            strdup("-IPTC:Keywords+=CropMode:\(mode.rawValue)"),
+            strdup("-IPTC:Keywords+=TargetRatio:\(targetRatio.id)"),
+            strdup("-IPTC:Keywords+=OriginalRatio:\(originalRatio)"),
+            strdup(imageURL.path),
+            nil
+        ]
+        
+        let envp: [UnsafeMutablePointer<CChar>?] = [
+            strdup("PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"),
+            nil
+        ]
+        
+        print("  🚀 Führe exiftool aus...")
+        let status = posix_spawn(&pid, exiftoolPath, nil, nil, argv, envp)
+        
+        // Cleanup
+        argv.forEach { if let ptr = $0 { free(ptr) } }
+        envp.forEach { if let ptr = $0 { free(ptr) } }
+        
+        if status == 0 {
+            var exitStatus: Int32 = 0
+            waitpid(pid, &exitStatus, 0)
+            let actualExit = (exitStatus >> 8) & 0xFF
+            
+            if actualExit == 0 {
+                print("  ✅ exiftool erfolgreich - Metadaten geschrieben ohne Bildveränderung!")
+                return .success(())
+            } else {
+                print("  ❌ exiftool exit code: \(actualExit)")
+                return .failure(MetadataServiceError.exiftoolFailed)
+            }
+        } else {
+            print("  ❌ posix_spawn failed: \(status)")
+            return .failure(MetadataServiceError.exiftoolFailed)
+        }
+    }
+    
+    /// Fallback: Speichert Crop-Metadaten mit ImageIO (kann Bild verändern!)
+    private static func saveCropMetadataWithImageIO(
+        imageURL: URL,
+        cropBox: CGRect,
+        imageSize: CGSize,
+        targetRatio: AspectRatio,
+        mode: CropMode,
+        originalRatio: String
+    ) -> Result<Void, Error> {
+        
+        print("⚠️ Verwende ImageIO Fallback (kann Bild re-encoden!)")
         
         // Normalisierte Koordinaten berechnen
         let normalizedOrigin = CGPoint(
@@ -36,9 +164,10 @@ class MetadataService {
             return .failure(MetadataServiceError.cannotReadImage)
         }
         
-        guard let imageRef = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-            return .failure(MetadataServiceError.cannotReadImage)
-        }
+        // Image reference wird nicht benötigt für Metadata-only update
+        // guard let imageRef = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+        //     return .failure(MetadataServiceError.cannotReadImage)
+        // }
         
         // Bestehende Metadaten auslesen
         var metadata = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] ?? [:]
@@ -243,6 +372,7 @@ enum MetadataServiceError: LocalizedError {
     case cannotReadImage
     case cannotCreateDestination
     case cannotFinalize
+    case exiftoolFailed
     case xmpCreationFailed
     
     var errorDescription: String? {
@@ -253,6 +383,8 @@ enum MetadataServiceError: LocalizedError {
             return "Ziel-Datei konnte nicht erstellt werden"
         case .cannotFinalize:
             return "Metadaten konnten nicht finalisiert werden"
+        case .exiftoolFailed:
+            return "exiftool konnte Metadaten nicht schreiben"
         case .xmpCreationFailed:
             return "XMP-Daten konnten nicht erstellt werden"
         }
