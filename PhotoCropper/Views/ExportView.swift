@@ -230,6 +230,14 @@ struct ExportView: View {
         
         isExporting = true
         
+        // Security-Scoped Resource Access starten
+        let sourceAccess = imageData.url.startAccessingSecurityScopedResource()
+        defer {
+            if sourceAccess {
+                imageData.url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
         // Backup erstellen falls gewünscht
         if createBackup {
             createBackupFile(for: imageData.url)
@@ -243,6 +251,14 @@ struct ExportView: View {
             let directory = outputDirectory ?? imageData.url.deletingLastPathComponent()
             let finalFilename = suffix.isEmpty ? filename : (filename as NSString).deletingPathExtension + "_\(suffix)." + imageData.url.pathExtension
             outputURL = directory.appendingPathComponent(finalFilename)
+        }
+        
+        // Security-Scoped Access für Output-Verzeichnis
+        let outputAccess = outputURL.startAccessingSecurityScopedResource()
+        defer {
+            if outputAccess {
+                outputURL.stopAccessingSecurityScopedResource()
+            }
         }
         
         // Metadaten speichern (nur wenn Checkbox aktiviert)

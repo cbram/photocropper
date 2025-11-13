@@ -75,8 +75,9 @@ class MetadataService {
         xmpDict[EXIFTags.cropDateTime] = ISO8601DateFormatter().string(from: Date())
         metadata[kCGImagePropertyIPTCDictionary as String] = xmpDict
         
-        // Temporäre Datei für Output
-        let tempURL = imageURL.deletingLastPathComponent().appendingPathComponent("temp_\(UUID().uuidString).\(imageURL.pathExtension)")
+        // Temporäre Datei im System-Temp-Verzeichnis erstellen (nicht im Zielverzeichnis!)
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempURL = tempDir.appendingPathComponent("photocropper_\(UUID().uuidString).\(imageURL.pathExtension)")
         
         // Bild mit neuen Metadaten speichern
         guard let destination = CGImageDestinationCreateWithURL(tempURL as CFURL, CGImageSourceGetType(imageSource)!, 1, nil) else {
@@ -86,18 +87,39 @@ class MetadataService {
         CGImageDestinationAddImage(destination, imageRef, metadata as CFDictionary)
         
         guard CGImageDestinationFinalize(destination) else {
+            // Cleanup bei Fehler
+            try? FileManager.default.removeItem(at: tempURL)
             return .failure(MetadataServiceError.cannotFinalize)
         }
         
         // Original-Datei ersetzen
         do {
             let fileManager = FileManager.default
+            
+            // Backup der Original-Datei (falls vorhanden)
+            let backupURL = tempDir.appendingPathComponent("photocropper_backup_\(UUID().uuidString).\(imageURL.pathExtension)")
             if fileManager.fileExists(atPath: imageURL.path) {
-                try fileManager.removeItem(at: imageURL)
+                try fileManager.moveItem(at: imageURL, to: backupURL)
             }
-            try fileManager.moveItem(at: tempURL, to: imageURL)
-            return .success(())
+            
+            // Temp-Datei an Ziel verschieben
+            do {
+                try fileManager.moveItem(at: tempURL, to: imageURL)
+                // Backup löschen bei Erfolg
+                try? fileManager.removeItem(at: backupURL)
+                return .success(())
+            } catch {
+                // Bei Fehler: Backup wiederherstellen
+                if fileManager.fileExists(atPath: backupURL.path) {
+                    try? fileManager.moveItem(at: backupURL, to: imageURL)
+                }
+                // Temp-Datei löschen
+                try? fileManager.removeItem(at: tempURL)
+                return .failure(error)
+            }
         } catch {
+            // Cleanup bei Fehler
+            try? FileManager.default.removeItem(at: tempURL)
             return .failure(error)
         }
     }
