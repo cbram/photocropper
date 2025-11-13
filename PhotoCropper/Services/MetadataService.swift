@@ -96,13 +96,22 @@ class MetadataService {
             return .failure(MetadataServiceError.cannotCreateDestination)
         }
         
-        CGImageDestinationAddImage(destination, imageRef, metadata as CFDictionary)
+        // WICHTIG: Alle Properties übernehmen inklusive MakerNotes, GPS, etc.
+        let options: [String: Any] = [
+            kCGImageDestinationLossyCompressionQuality as String: 1.0,  // Maximum Qualität
+            kCGImageDestinationMetadata as String: metadata,
+            kCGImageDestinationMergeMetadata as String: true  // Merge statt replace!
+        ]
+        
+        CGImageDestinationAddImageFromSource(destination, imageSource, 0, options as CFDictionary)
         
         guard CGImageDestinationFinalize(destination) else {
             // Cleanup bei Fehler
             try? FileManager.default.removeItem(at: tempURL)
             return .failure(MetadataServiceError.cannotFinalize)
         }
+        
+        print("  ✅ Bild mit Metadaten geschrieben (Merge-Modus)")
         
         // Original-Datei ersetzen
         do {
