@@ -159,7 +159,8 @@ class CropCanvasView: NSView {
         context.stroke(cropRect)
         
         // Ratio-Label auf Crop-Box
-        let labelText = "\(Int(cropBox.width))x\(Int(cropBox.height))"
+        let ratio = cropBox.width / cropBox.height
+        let labelText = String(format: "\(Int(cropBox.width))×\(Int(cropBox.height)) (%.2f:1)", ratio)
         let attributes: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.red,
             .font: NSFont.boldSystemFont(ofSize: 14),
@@ -170,10 +171,20 @@ class CropCanvasView: NSView {
         let labelRect = CGRect(
             x: cropRect.midX - labelSize.width / 2,
             y: cropRect.minY - labelSize.height - 5,
-            width: labelSize.width,
-            height: labelSize.height
+            width: labelSize.width + 10,
+            height: labelSize.height + 4
         )
-        attributedString.draw(in: labelRect)
+        
+        // Weißer Hintergrund für bessere Lesbarkeit
+        context.setFillColor(NSColor.white.withAlphaComponent(0.9).cgColor)
+        context.fill(labelRect)
+        
+        attributedString.draw(in: CGRect(
+            x: labelRect.origin.x + 5,
+            y: labelRect.origin.y + 2,
+            width: labelRect.width - 10,
+            height: labelRect.height - 4
+        ))
     }
     
     private func drawInfoText(in imageRect: CGRect, context: CGContext) {

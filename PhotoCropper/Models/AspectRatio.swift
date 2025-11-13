@@ -58,20 +58,35 @@ enum AspectRatio: Identifiable, Hashable {
         let imageRatio = imageSize.width / imageSize.height
         let targetRatio = self.value
         
-        if imageRatio > targetRatio {
-            // Bild ist breiter → Crop oben/unten
-            let cropHeight = imageSize.height
-            let cropWidth = cropHeight * CGFloat(targetRatio)
-            return CGSize(width: cropWidth, height: cropHeight)
-        } else if imageRatio < targetRatio {
-            // Bild ist höher → Crop links/rechts
-            let cropWidth = imageSize.width
-            let cropHeight = cropWidth / CGFloat(targetRatio)
-            return CGSize(width: cropWidth, height: cropHeight)
-        } else {
-            // Gleiches Verhältnis → Keine Crops nötig
+        // Wenn Ratios gleich sind, volle Bildgröße verwenden
+        if abs(imageRatio - targetRatio) < 0.001 {
             return imageSize
         }
+        
+        // Berechne beide Möglichkeiten und wähle die größere Crop-Box
+        // Option 1: Höhe maximieren
+        let widthFromHeight = imageSize.height * CGFloat(targetRatio)
+        let option1 = CGSize(width: widthFromHeight, height: imageSize.height)
+        
+        // Option 2: Breite maximieren
+        let heightFromWidth = imageSize.width / CGFloat(targetRatio)
+        let option2 = CGSize(width: imageSize.width, height: heightFromWidth)
+        
+        // Wähle die Option, die in das Bild passt und größer ist
+        if option1.width <= imageSize.width && option1.height <= imageSize.height {
+            if option2.width <= imageSize.width && option2.height <= imageSize.height {
+                // Beide passen, wähle die größere Fläche
+                let area1 = option1.width * option1.height
+                let area2 = option2.width * option2.height
+                return area1 > area2 ? option1 : option2
+            }
+            return option1
+        } else if option2.width <= imageSize.width && option2.height <= imageSize.height {
+            return option2
+        }
+        
+        // Fallback: Sollte nicht passieren, aber für Sicherheit
+        return imageSize
     }
     
     /// Berechnet die Standard-Position für die Crop-Box (zentriert)
