@@ -63,29 +63,22 @@ enum AspectRatio: Identifiable, Hashable {
             return imageSize
         }
         
-        // Berechne beide Möglichkeiten und wähle die größere Crop-Box
-        // Option 1: Höhe maximieren
+        // Option 1: Basierend auf Höhe berechnen (volle Höhe nutzen)
         let widthFromHeight = imageSize.height * CGFloat(targetRatio)
-        let option1 = CGSize(width: widthFromHeight, height: imageSize.height)
         
-        // Option 2: Breite maximieren
+        // Option 2: Basierend auf Breite berechnen (volle Breite nutzen)
         let heightFromWidth = imageSize.width / CGFloat(targetRatio)
-        let option2 = CGSize(width: imageSize.width, height: heightFromWidth)
         
-        // Wähle die Option, die in das Bild passt und größer ist
-        if option1.width <= imageSize.width && option1.height <= imageSize.height {
-            if option2.width <= imageSize.width && option2.height <= imageSize.height {
-                // Beide passen, wähle die größere Fläche
-                let area1 = option1.width * option1.height
-                let area2 = option2.width * option2.height
-                return area1 > area2 ? option1 : option2
-            }
-            return option1
-        } else if option2.width <= imageSize.width && option2.height <= imageSize.height {
-            return option2
+        // Prüfe welche Option ins Bild passt
+        if widthFromHeight <= imageSize.width {
+            // Option 1 passt: Volle Höhe, Breite angepasst
+            return CGSize(width: widthFromHeight, height: imageSize.height)
+        } else if heightFromWidth <= imageSize.height {
+            // Option 2 passt: Volle Breite, Höhe angepasst
+            return CGSize(width: imageSize.width, height: heightFromWidth)
         }
         
-        // Fallback: Sollte nicht passieren, aber für Sicherheit
+        // Fallback: Sollte nicht passieren
         return imageSize
     }
     
