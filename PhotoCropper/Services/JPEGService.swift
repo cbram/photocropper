@@ -106,32 +106,33 @@ class JPEGService {
         // posix_spawn benötigt C-Arrays - DIREKT jpegtran aufrufen
         var pid: pid_t = 0
         
-        // Debug: Zeige alle Argumente
+        // WICHTIG: jpegtran Syntax ist: jpegtran [switches] -outfile output input
+        // Der Input-File muss als LETZTES Argument kommen!
         let argStrings = [
             jpegtranPath,
             "-crop",
             cropArg,
             "-copy",
             "all",
-            imageURL.path,
             "-outfile",
-            outputURL.path
+            outputURL.path,
+            imageURL.path              // Input file als LETZTES!
         ]
         
-        print("📋 argv-Liste:")
+        print("📋 argv-Liste (KORRIGIERTE Reihenfolge):")
         for (index, arg) in argStrings.enumerated() {
             print("  argv[\(index)] = \"\(arg)\"")
         }
         
         let argv: [UnsafeMutablePointer<CChar>?] = [
-            strdup(jpegtranPath),              // argv[0] = Executable selbst
+            strdup(jpegtranPath),              // argv[0] = Executable
             strdup("-crop"),                   // argv[1]
             strdup(cropArg),                   // argv[2]
             strdup("-copy"),                   // argv[3]
             strdup("all"),                     // argv[4]
-            strdup(imageURL.path),             // argv[5] = Input file
-            strdup("-outfile"),                // argv[6]
-            strdup(outputURL.path),            // argv[7] = Output file
+            strdup("-outfile"),                // argv[5]
+            strdup(outputURL.path),            // argv[6] = Output file
+            strdup(imageURL.path),             // argv[7] = Input file (LETZTES ARG!)
             nil                                // argv[8] = NULL terminator
         ]
         
