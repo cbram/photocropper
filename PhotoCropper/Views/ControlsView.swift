@@ -114,9 +114,24 @@ struct ControlsView: View {
                                 } else {
                                     let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
                                     cropBox.size.height = cropBox.size.width / ratio
+                                    // Sicherstellen dass Höhe nicht zu groß wird
+                                    if cropBox.size.height > imageSize.height {
+                                        cropBox.size.height = imageSize.height
+                                        cropBox.size.width = cropBox.size.height * ratio
+                                    }
                                 }
                             }
-                        ), in: 1...max(1, imageSize.width))
+                        ), in: {
+                            // Bei Aspect Ratio Lock: Max. Breite begrenzen durch max. Höhe
+                            if case .custom = targetRatio {
+                                return 1...max(1, imageSize.width)
+                            } else {
+                                let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
+                                let maxWidthForHeight = imageSize.height * ratio
+                                let maxWidth = min(imageSize.width, maxWidthForHeight)
+                                return 1...max(1, maxWidth)
+                            }
+                        }())
                         Text("\(Int(cropBox.width))")
                             .frame(width: 60)
                     }
@@ -134,9 +149,24 @@ struct ControlsView: View {
                                 } else {
                                     let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
                                     cropBox.size.width = cropBox.size.height * ratio
+                                    // Sicherstellen dass Breite nicht zu groß wird
+                                    if cropBox.size.width > imageSize.width {
+                                        cropBox.size.width = imageSize.width
+                                        cropBox.size.height = cropBox.size.width / ratio
+                                    }
                                 }
                             }
-                        ), in: 1...max(1, imageSize.height))
+                        ), in: {
+                            // Bei Aspect Ratio Lock: Max. Höhe begrenzen durch max. Breite
+                            if case .custom = targetRatio {
+                                return 1...max(1, imageSize.height)
+                            } else {
+                                let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
+                                let maxHeightForWidth = imageSize.width / ratio
+                                let maxHeight = min(imageSize.height, maxHeightForWidth)
+                                return 1...max(1, maxHeight)
+                            }
+                        }())
                         Text("\(Int(cropBox.height))")
                             .frame(width: 60)
                     }

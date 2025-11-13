@@ -1,10 +1,16 @@
 {
   "images" : [
     {
+      "filename" : "icon_512x512.png",
+      "idiom" : "mac",
+      "scale" : "1x",
+      "size" : "512x512"
+    },
+    {
       "filename" : "icon_1024x1024.png",
-      "idiom" : "universal",
-      "platform" : "macos",
-      "size" : "1024x1024"
+      "idiom" : "mac",
+      "scale" : "2x",
+      "size" : "512x512"
     }
   ],
   "info" : {
