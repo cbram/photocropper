@@ -43,37 +43,49 @@ class MetadataService {
         // Bestehende Metadaten auslesen
         var metadata = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] ?? [:]
         
+        print("📊 Metadaten-Service:")
+        print("  Original Image Size: \(imageSize.width)x\(imageSize.height)")
+        print("  Crop Box (pixels): \(cropBox)")
+        print("  Normalized Origin: \(normalizedOrigin)")
+        print("  Normalized Size: \(normalizedSize)")
+        
         // EXIF-Dictionary erstellen/aktualisieren
         var exifDict = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
         
-        // DefaultCropOrigin und DefaultCropSize speichern
-        exifDict["DefaultCropOrigin"] = [normalizedOrigin.x, normalizedOrigin.y]
-        exifDict["DefaultCropSize"] = [normalizedSize.width, normalizedSize.height]
+        // DefaultCropOrigin und DefaultCropSize speichern (als Array von NSNumber)
+        exifDict["DefaultCropOrigin"] = [NSNumber(value: normalizedOrigin.x), NSNumber(value: normalizedOrigin.y)]
+        exifDict["DefaultCropSize"] = [NSNumber(value: normalizedSize.width), NSNumber(value: normalizedSize.height)]
+        
+        print("  ✅ EXIF DefaultCropOrigin: [\(normalizedOrigin.x), \(normalizedOrigin.y)]")
+        print("  ✅ EXIF DefaultCropSize: [\(normalizedSize.width), \(normalizedSize.height)]")
         
         metadata[kCGImagePropertyExifDictionary as String] = exifDict
         
-        // XMP-Daten erstellen/aktualisieren
-        // Für JPEG ohne XMP: XMP-Daten erstellen
-        let xmpString = createXMPString(
-            cropOrigin: normalizedOrigin,
-            cropSize: normalizedSize,
-            mode: mode,
-            originalRatio: originalRatio,
-            targetRatio: targetRatio.id
-        )
+        // XMP-Dictionary für Crop-Daten
+        var xmpDict = metadata["http://ns.adobe.com/xap/1.0/" as String] as? [String: Any] ?? [:]
         
-        // XMP in MakerApple-Dictionary speichern (für JPEG)
-        var makerAppleDict = metadata[kCGImagePropertyMakerAppleDictionary as String] as? [String: Any] ?? [:]
-        makerAppleDict["XMP"] = xmpString
-        metadata[kCGImagePropertyMakerAppleDictionary as String] = makerAppleDict
+        // Adobe XMP Crop Tags (Lightroom-kompatibel)
+        xmpDict["crs:CropTop"] = NSNumber(value: normalizedOrigin.y)
+        xmpDict["crs:CropLeft"] = NSNumber(value: normalizedOrigin.x)
+        xmpDict["crs:CropBottom"] = NSNumber(value: normalizedOrigin.y + normalizedSize.height)
+        xmpDict["crs:CropRight"] = NSNumber(value: normalizedOrigin.x + normalizedSize.width)
         
-        // Zusätzlich in IPTC-Dictionary für Kompatibilität
-        var xmpDict = metadata[kCGImagePropertyIPTCDictionary as String] as? [String: Any] ?? [:]
-        xmpDict[EXIFTags.cropMode] = mode.rawValue
-        xmpDict[EXIFTags.originalRatio] = originalRatio
-        xmpDict[EXIFTags.targetRatio] = targetRatio.id
-        xmpDict[EXIFTags.cropDateTime] = ISO8601DateFormatter().string(from: Date())
-        metadata[kCGImagePropertyIPTCDictionary as String] = xmpDict
+        print("  ✅ XMP CropTop: \(normalizedOrigin.y)")
+        print("  ✅ XMP CropLeft: \(normalizedOrigin.x)")
+        print("  ✅ XMP CropBottom: \(normalizedOrigin.y + normalizedSize.height)")
+        print("  ✅ XMP CropRight: \(normalizedOrigin.x + normalizedSize.width)")
+        
+        metadata["http://ns.adobe.com/xap/1.0/" as String] = xmpDict
+        
+        // Custom Tags in IPTC-Dictionary für unsere eigene Verwendung
+        var iptcDict = metadata[kCGImagePropertyIPTCDictionary as String] as? [String: Any] ?? [:]
+        iptcDict[EXIFTags.cropMode] = mode.rawValue
+        iptcDict[EXIFTags.originalRatio] = originalRatio
+        iptcDict[EXIFTags.targetRatio] = targetRatio.id
+        iptcDict[EXIFTags.cropDateTime] = ISO8601DateFormatter().string(from: Date())
+        metadata[kCGImagePropertyIPTCDictionary as String] = iptcDict
+        
+        print("  ✅ IPTC Custom Tags geschrieben")
         
         // Temporäre Datei im System-Temp-Verzeichnis erstellen (nicht im Zielverzeichnis!)
         let tempDir = FileManager.default.temporaryDirectory
