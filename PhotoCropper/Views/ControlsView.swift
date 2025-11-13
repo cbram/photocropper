@@ -107,28 +107,33 @@ struct ControlsView: View {
                         Slider(value: Binding(
                             get: { cropBox.width },
                             set: { newValue in
-                                cropBox.size.width = max(1, min(newValue, imageSize.width))
+                                // WICHTIG: Max. Breite basierend auf aktueller X-Position!
+                                let maxWidth = imageSize.width - cropBox.origin.x
+                                cropBox.size.width = max(1, min(newValue, maxWidth))
                                 // Wenn Aspect Ratio gesperrt, Höhe anpassen
                                 if case .custom = targetRatio {
                                     // Bei custom: Nichts tun
                                 } else {
                                     let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
                                     cropBox.size.height = cropBox.size.width / ratio
-                                    // Sicherstellen dass Höhe nicht zu groß wird
-                                    if cropBox.size.height > imageSize.height {
-                                        cropBox.size.height = imageSize.height
+                                    // Sicherstellen dass Höhe nicht über Bildrand hinausgeht
+                                    let maxHeight = imageSize.height - cropBox.origin.y
+                                    if cropBox.size.height > maxHeight {
+                                        cropBox.size.height = maxHeight
                                         cropBox.size.width = cropBox.size.height * ratio
                                     }
                                 }
                             }
                         ), in: {
-                            // Bei Aspect Ratio Lock: Max. Breite begrenzen durch max. Höhe
+                            // Bei Aspect Ratio Lock: Max. Breite begrenzen durch max. Höhe UND Position
+                            let maxWidthForPosition = imageSize.width - cropBox.origin.x
                             if case .custom = targetRatio {
-                                return 1...max(1, imageSize.width)
+                                return 1...max(1, maxWidthForPosition)
                             } else {
                                 let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
-                                let maxWidthForHeight = imageSize.height * ratio
-                                let maxWidth = min(imageSize.width, maxWidthForHeight)
+                                let maxHeightForPosition = imageSize.height - cropBox.origin.y
+                                let maxWidthForHeight = maxHeightForPosition * ratio
+                                let maxWidth = min(maxWidthForPosition, maxWidthForHeight)
                                 return 1...max(1, maxWidth)
                             }
                         }())
@@ -142,28 +147,33 @@ struct ControlsView: View {
                         Slider(value: Binding(
                             get: { cropBox.height },
                             set: { newValue in
-                                cropBox.size.height = max(1, min(newValue, imageSize.height))
+                                // WICHTIG: Max. Höhe basierend auf aktueller Y-Position!
+                                let maxHeight = imageSize.height - cropBox.origin.y
+                                cropBox.size.height = max(1, min(newValue, maxHeight))
                                 // Wenn Aspect Ratio gesperrt, Breite anpassen
                                 if case .custom = targetRatio {
                                     // Bei custom: Nichts tun
                                 } else {
                                     let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
                                     cropBox.size.width = cropBox.size.height * ratio
-                                    // Sicherstellen dass Breite nicht zu groß wird
-                                    if cropBox.size.width > imageSize.width {
-                                        cropBox.size.width = imageSize.width
+                                    // Sicherstellen dass Breite nicht über Bildrand hinausgeht
+                                    let maxWidth = imageSize.width - cropBox.origin.x
+                                    if cropBox.size.width > maxWidth {
+                                        cropBox.size.width = maxWidth
                                         cropBox.size.height = cropBox.size.width / ratio
                                     }
                                 }
                             }
                         ), in: {
-                            // Bei Aspect Ratio Lock: Max. Höhe begrenzen durch max. Breite
+                            // Bei Aspect Ratio Lock: Max. Höhe begrenzen durch max. Breite UND Position
+                            let maxHeightForPosition = imageSize.height - cropBox.origin.y
                             if case .custom = targetRatio {
-                                return 1...max(1, imageSize.height)
+                                return 1...max(1, maxHeightForPosition)
                             } else {
                                 let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
-                                let maxHeightForWidth = imageSize.width / ratio
-                                let maxHeight = min(imageSize.height, maxHeightForWidth)
+                                let maxWidthForPosition = imageSize.width - cropBox.origin.x
+                                let maxHeightForWidth = maxWidthForPosition / ratio
+                                let maxHeight = min(maxHeightForPosition, maxHeightForWidth)
                                 return 1...max(1, maxHeight)
                             }
                         }())
