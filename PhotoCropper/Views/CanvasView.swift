@@ -195,21 +195,26 @@ class CropCanvasView: NSView {
         let handleSize: CGFloat = 16  // Größer für bessere Sichtbarkeit
         let handleColor = NSColor.white
         let handleBorderColor = NSColor.red
+        let offset: CGFloat = 2  // Offset nach innen, damit Handles immer sichtbar sind
         
-        // Eckpunkte
+        // Sicherstellen dass Crop-Rect innerhalb der View-Bounds ist
+        let visibleRect = bounds.intersection(cropRect)
+        guard !visibleRect.isEmpty else { return }
+        
+        // Eckpunkte (mit Offset nach innen)
         let corners = [
-            CGPoint(x: cropRect.minX, y: cropRect.minY),  // Unten links
-            CGPoint(x: cropRect.maxX, y: cropRect.minY),  // Unten rechts
-            CGPoint(x: cropRect.minX, y: cropRect.maxY),  // Oben links
-            CGPoint(x: cropRect.maxX, y: cropRect.maxY)   // Oben rechts
+            CGPoint(x: cropRect.minX + offset, y: cropRect.minY + offset),  // Unten links
+            CGPoint(x: cropRect.maxX - offset, y: cropRect.minY + offset),  // Unten rechts
+            CGPoint(x: cropRect.minX + offset, y: cropRect.maxY - offset),  // Oben links
+            CGPoint(x: cropRect.maxX - offset, y: cropRect.maxY - offset)   // Oben rechts
         ]
         
-        // Kantenpunkte (Mitte)
+        // Kantenpunkte (Mitte, mit Offset nach innen)
         let edges = [
-            CGPoint(x: cropRect.midX, y: cropRect.minY),  // Unten
-            CGPoint(x: cropRect.midX, y: cropRect.maxY),  // Oben
-            CGPoint(x: cropRect.minX, y: cropRect.midY),  // Links
-            CGPoint(x: cropRect.maxX, y: cropRect.midY)   // Rechts
+            CGPoint(x: cropRect.midX, y: cropRect.minY + offset),  // Unten
+            CGPoint(x: cropRect.midX, y: cropRect.maxY - offset),  // Oben
+            CGPoint(x: cropRect.minX + offset, y: cropRect.midY),  // Links
+            CGPoint(x: cropRect.maxX - offset, y: cropRect.midY)   // Rechts
         ]
         
         // Zeichne Ecken-Handles (größer)
@@ -221,14 +226,17 @@ class CropCanvasView: NSView {
                 height: handleSize
             )
             
-            // Weißer Hintergrund
-            context.setFillColor(handleColor.cgColor)
-            context.fill(handleRect)
-            
-            // Roter Rahmen
-            context.setStrokeColor(handleBorderColor.cgColor)
-            context.setLineWidth(2.0)
-            context.stroke(handleRect)
+            // Nur zeichnen wenn innerhalb der View-Bounds
+            if bounds.intersects(handleRect) {
+                // Weißer Hintergrund
+                context.setFillColor(handleColor.cgColor)
+                context.fill(handleRect)
+                
+                // Roter Rahmen
+                context.setStrokeColor(handleBorderColor.cgColor)
+                context.setLineWidth(2.0)
+                context.stroke(handleRect)
+            }
         }
         
         // Zeichne Kanten-Handles (rechteckig, gut sichtbar)
@@ -256,14 +264,17 @@ class CropCanvasView: NSView {
                 )
             }
             
-            // Weißer Hintergrund
-            context.setFillColor(handleColor.cgColor)
-            context.fill(handleRect)
-            
-            // Roter Rahmen
-            context.setStrokeColor(handleBorderColor.cgColor)
-            context.setLineWidth(2.0)
-            context.stroke(handleRect)
+            // Nur zeichnen wenn innerhalb der View-Bounds
+            if bounds.intersects(handleRect) {
+                // Weißer Hintergrund
+                context.setFillColor(handleColor.cgColor)
+                context.fill(handleRect)
+                
+                // Roter Rahmen
+                context.setStrokeColor(handleBorderColor.cgColor)
+                context.setLineWidth(2.0)
+                context.stroke(handleRect)
+            }
         }
     }
     
@@ -378,41 +389,49 @@ class CropCanvasView: NSView {
             height: cropBox.height * scaleY
         )
         
-        let handleSize: CGFloat = 10
-        let edgeSize: CGFloat = 15  // Größerer Bereich für Kanten
+        let handleSize: CGFloat = 16  // Größer für bessere Erkennung
+        let edgeSize: CGFloat = 20  // Größerer Bereich für Kanten
+        let offset: CGFloat = 2  // Offset nach innen (wie beim Zeichnen)
         
-        // Ecken prüfen (Priorität vor Kanten)
-        if point.distance(to: cropRect.origin) < handleSize {
+        // Ecken prüfen (Priorität vor Kanten) - mit Offset nach innen
+        let corners = [
+            CGPoint(x: cropRect.minX + offset, y: cropRect.minY + offset),  // Unten links
+            CGPoint(x: cropRect.maxX - offset, y: cropRect.minY + offset),  // Unten rechts
+            CGPoint(x: cropRect.minX + offset, y: cropRect.maxY - offset),  // Oben links
+            CGPoint(x: cropRect.maxX - offset, y: cropRect.maxY - offset)   // Oben rechts
+        ]
+        
+        if point.distance(to: corners[0]) < handleSize {
             return .bottomLeft
         }
-        if point.distance(to: CGPoint(x: cropRect.maxX, y: cropRect.minY)) < handleSize {
+        if point.distance(to: corners[1]) < handleSize {
             return .bottomRight
         }
-        if point.distance(to: CGPoint(x: cropRect.minX, y: cropRect.maxY)) < handleSize {
+        if point.distance(to: corners[2]) < handleSize {
             return .topLeft
         }
-        if point.distance(to: CGPoint(x: cropRect.maxX, y: cropRect.maxY)) < handleSize {
+        if point.distance(to: corners[3]) < handleSize {
             return .topRight
         }
         
-        // Kanten prüfen (mit größerem Bereich)
+        // Kanten prüfen (mit größerem Bereich und Offset)
         // Obere Kante
-        if abs(point.y - cropRect.maxY) < edgeSize && 
+        if abs(point.y - (cropRect.maxY - offset)) < edgeSize && 
            point.x >= cropRect.minX && point.x <= cropRect.maxX {
             return .top
         }
         // Untere Kante
-        if abs(point.y - cropRect.minY) < edgeSize && 
+        if abs(point.y - (cropRect.minY + offset)) < edgeSize && 
            point.x >= cropRect.minX && point.x <= cropRect.maxX {
             return .bottom
         }
         // Linke Kante
-        if abs(point.x - cropRect.minX) < edgeSize && 
+        if abs(point.x - (cropRect.minX + offset)) < edgeSize && 
            point.y >= cropRect.minY && point.y <= cropRect.maxY {
             return .left
         }
         // Rechte Kante
-        if abs(point.x - cropRect.maxX) < edgeSize && 
+        if abs(point.x - (cropRect.maxX - offset)) < edgeSize && 
            point.y >= cropRect.minY && point.y <= cropRect.maxY {
             return .right
         }
