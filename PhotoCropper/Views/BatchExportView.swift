@@ -277,31 +277,40 @@ struct BatchExportView: View {
             return false
         }
         
+        print("📊 exportNextImage: currentIndex=\(currentExportIndex), readyCount=\(readyImages.count)")
+        
         guard currentExportIndex < readyImages.count else {
             // Fertig!
+            print("✅ Alle Bilder exportiert!")
             isExporting = false
             showResults = true
             return
         }
         
         let item = readyImages[currentExportIndex]
+        print("📤 Exportiere Bild \(currentExportIndex + 1): \(item.imageData.url.lastPathComponent)")
         
         // Exportiere Bild
         exportImage(item) { result in
-            exportResults.append(result)
+            print("📥 Export-Ergebnis für Bild \(self.currentExportIndex + 1): \(result.success ? "✅ Erfolg" : "❌ Fehler")")
             
-            // Markiere als exportiert
-            if result.success {
-                item.status = .exported
-            } else {
-                item.status = .error(result.message)
+            self.exportResults.append(result)
+            
+            // Markiere als exportiert (muss auf Main-Thread sein!)
+            DispatchQueue.main.async {
+                if result.success {
+                    item.status = .exported
+                } else {
+                    item.status = .error(result.message)
+                }
             }
             
-            currentExportIndex += 1
+            self.currentExportIndex += 1
             
             // Nächstes Bild (mit kleiner Verzögerung für UI-Update)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                exportNextImage()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                print("🔄 Starte nächstes Bild...")
+                self.exportNextImage()
             }
         }
     }
