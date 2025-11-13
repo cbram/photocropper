@@ -97,9 +97,9 @@ class JPEGService {
         print("✅ jpegtran gefunden in: \(jpegtranPath)")
         
         let task = Process()
-        task.executableURL = URL(fileURLWithPath: jpegtranPath)
+        task.launchPath = jpegtranPath  // launchPath statt executableURL
         
-        // jpegtran -crop WxH+X+Y input.jpg output.jpg
+        // jpegtran -crop WxH+X+Y -copy all input.jpg -outfile output.jpg
         task.arguments = [
             "-crop", "\(w)x\(h)+\(x)+\(y)",
             "-copy", "all",  // Alle Metadaten kopieren
@@ -107,23 +107,31 @@ class JPEGService {
             "-outfile", outputURL.path
         ]
         
+        // Umgebungsvariablen setzen (wichtig für subprocess)
+        task.environment = ProcessInfo.processInfo.environment
+        
         print("🔧 jpegtran Befehl: \(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all \(imageURL.path) -outfile \(outputURL.path)")
         
+        let outputPipe = Pipe()
         let errorPipe = Pipe()
+        task.standardOutput = outputPipe
         task.standardError = errorPipe
         
         do {
-            try task.run()
+            task.launch()  // launch statt run
             task.waitUntilExit()
             
             if task.terminationStatus == 0 {
+                print("✅ jpegtran erfolgreich ausgeführt")
                 return .success(())
             } else {
                 let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                 let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+                print("❌ jpegtran Fehler: \(errorString)")
                 return .failure(JPEGServiceError.cropFailed(errorString))
             }
         } catch {
+            print("❌ jpegtran Exception: \(error.localizedDescription)")
             return .failure(error)
         }
     }
