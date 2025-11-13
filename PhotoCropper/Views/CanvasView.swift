@@ -217,21 +217,22 @@ class CropCanvasView: NSView {
             return
         }
         
-        // Eckpunkte (AUF dem Rahmen, nicht innerhalb)
+        // Eckpunkte (auf VISIBLE RECT, nicht auf vollständiger Crop-Rect!)
+        // Dies stellt sicher, dass Handles immer innerhalb der View sind
         let corners = [
-            CGPoint(x: cropRect.minX, y: cropRect.minY),  // Unten links
-            CGPoint(x: cropRect.maxX, y: cropRect.minY),  // Unten rechts
-            CGPoint(x: cropRect.minX, y: cropRect.maxY),  // Oben links
-            CGPoint(x: cropRect.maxX, y: cropRect.maxY)   // Oben rechts
+            CGPoint(x: visibleRect.minX, y: visibleRect.minY),  // Unten links
+            CGPoint(x: visibleRect.maxX, y: visibleRect.minY),  // Unten rechts
+            CGPoint(x: visibleRect.minX, y: visibleRect.maxY),  // Oben links
+            CGPoint(x: visibleRect.maxX, y: visibleRect.maxY)   // Oben rechts
         ]
-        print("   Ecken: \(corners)")
+        print("   Ecken (auf visibleRect): \(corners)")
         
-        // Kantenpunkte (Mitte, AUF dem Rahmen)
+        // Kantenpunkte (Mitte, auf VISIBLE RECT)
         let edges = [
-            CGPoint(x: cropRect.midX, y: cropRect.minY),  // Unten
-            CGPoint(x: cropRect.midX, y: cropRect.maxY),  // Oben
-            CGPoint(x: cropRect.minX, y: cropRect.midY),  // Links
-            CGPoint(x: cropRect.maxX, y: cropRect.midY)   // Rechts
+            CGPoint(x: visibleRect.midX, y: visibleRect.minY),  // Unten
+            CGPoint(x: visibleRect.midX, y: visibleRect.maxY),  // Oben
+            CGPoint(x: visibleRect.minX, y: visibleRect.midY),  // Links
+            CGPoint(x: visibleRect.maxX, y: visibleRect.midY)   // Rechts
         ]
         
         // Zeichne Ecken-Handles (größer)
