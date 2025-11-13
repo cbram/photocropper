@@ -114,6 +114,22 @@ struct ContentView: View {
                         maximizeCropBox()
                     }
                 )
+                .onChange(of: targetRatio) { oldValue, newValue in
+                    // Crop-Box neu berechnen wenn Zielformat geändert wird
+                    updateCropBoxForNewImage()
+                }
+                .onChange(of: customWidth) { oldValue, newValue in
+                    // Auch bei Custom-Ratio-Änderung neu berechnen
+                    if case .custom = targetRatio {
+                        updateCropBoxForNewImage()
+                    }
+                }
+                .onChange(of: customHeight) { oldValue, newValue in
+                    // Auch bei Custom-Ratio-Änderung neu berechnen
+                    if case .custom = targetRatio {
+                        updateCropBoxForNewImage()
+                    }
+                }
                 
                 Divider()
                 
