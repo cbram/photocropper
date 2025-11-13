@@ -421,15 +421,19 @@ class CropCanvasView: NSView {
             height: cropBox.height * scaleY
         )
         
+        // WICHTIG: Verwende visibleRect für Hit-Testing (wie beim Zeichnen!)
+        let visibleRect = bounds.intersection(cropRect)
+        guard !visibleRect.isEmpty else { return nil }
+        
         let handleSize: CGFloat = 18  // Größer für bessere Erkennung
         let edgeSize: CGFloat = 20  // Größerer Bereich für Kanten
         
-        // Ecken prüfen (Priorität vor Kanten) - AUF dem Rahmen
+        // Ecken prüfen (Priorität vor Kanten) - auf VISIBLE RECT
         let corners = [
-            CGPoint(x: cropRect.minX, y: cropRect.minY),  // Unten links
-            CGPoint(x: cropRect.maxX, y: cropRect.minY),  // Unten rechts
-            CGPoint(x: cropRect.minX, y: cropRect.maxY),  // Oben links
-            CGPoint(x: cropRect.maxX, y: cropRect.maxY)   // Oben rechts
+            CGPoint(x: visibleRect.minX, y: visibleRect.minY),  // Unten links
+            CGPoint(x: visibleRect.maxX, y: visibleRect.minY),  // Unten rechts
+            CGPoint(x: visibleRect.minX, y: visibleRect.maxY),  // Oben links
+            CGPoint(x: visibleRect.maxX, y: visibleRect.maxY)   // Oben rechts
         ]
         
         if point.distance(to: corners[0]) < handleSize {
@@ -445,29 +449,29 @@ class CropCanvasView: NSView {
             return .topRight
         }
         
-        // Kanten prüfen (mit größerem Bereich) - AUF dem Rahmen
+        // Kanten prüfen (mit größerem Bereich) - auf VISIBLE RECT
         // Obere Kante
-        if abs(point.y - cropRect.maxY) < edgeSize && 
-           point.x >= cropRect.minX && point.x <= cropRect.maxX {
+        if abs(point.y - visibleRect.maxY) < edgeSize && 
+           point.x >= visibleRect.minX && point.x <= visibleRect.maxX {
             return .top
         }
         // Untere Kante
-        if abs(point.y - cropRect.minY) < edgeSize && 
-           point.x >= cropRect.minX && point.x <= cropRect.maxX {
+        if abs(point.y - visibleRect.minY) < edgeSize && 
+           point.x >= visibleRect.minX && point.x <= visibleRect.maxX {
             return .bottom
         }
         // Linke Kante
-        if abs(point.x - cropRect.minX) < edgeSize && 
-           point.y >= cropRect.minY && point.y <= cropRect.maxY {
+        if abs(point.x - visibleRect.minX) < edgeSize && 
+           point.y >= visibleRect.minY && point.y <= visibleRect.maxY {
             return .left
         }
         // Rechte Kante
-        if abs(point.x - cropRect.maxX) < edgeSize && 
-           point.y >= cropRect.minY && point.y <= cropRect.maxY {
+        if abs(point.x - visibleRect.maxX) < edgeSize && 
+           point.y >= visibleRect.minY && point.y <= visibleRect.maxY {
             return .right
         }
         
-        // Mitte prüfen
+        // Mitte prüfen (auf vollständiger cropRect für Drag-Funktionalität)
         if cropRect.contains(point) {
             return .center
         }
