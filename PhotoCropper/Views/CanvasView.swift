@@ -159,6 +159,9 @@ class CropCanvasView: NSView {
         context.setLineWidth(3.0)
         context.stroke(cropRect)
         
+        // Zeichne Handles (Greifer) an Ecken und Kanten
+        drawHandles(in: cropRect, context: context)
+        
         // Ratio-Label auf Crop-Box
         let ratio = cropBox.width / cropBox.height
         let labelText = String(format: "\(Int(cropBox.width))×\(Int(cropBox.height)) (%.2f:1)", ratio)
@@ -186,6 +189,82 @@ class CropCanvasView: NSView {
             width: labelRect.width - 10,
             height: labelRect.height - 4
         ))
+    }
+    
+    private func drawHandles(in cropRect: CGRect, context: CGContext) {
+        let handleSize: CGFloat = 12
+        let handleColor = NSColor.white
+        let handleBorderColor = NSColor.red
+        
+        // Eckpunkte
+        let corners = [
+            CGPoint(x: cropRect.minX, y: cropRect.minY),  // Unten links
+            CGPoint(x: cropRect.maxX, y: cropRect.minY),  // Unten rechts
+            CGPoint(x: cropRect.minX, y: cropRect.maxY),  // Oben links
+            CGPoint(x: cropRect.maxX, y: cropRect.maxY)   // Oben rechts
+        ]
+        
+        // Kantenpunkte (Mitte)
+        let edges = [
+            CGPoint(x: cropRect.midX, y: cropRect.minY),  // Unten
+            CGPoint(x: cropRect.midX, y: cropRect.maxY),  // Oben
+            CGPoint(x: cropRect.minX, y: cropRect.midY),  // Links
+            CGPoint(x: cropRect.maxX, y: cropRect.midY)   // Rechts
+        ]
+        
+        // Zeichne Ecken-Handles (größer)
+        for point in corners {
+            let handleRect = CGRect(
+                x: point.x - handleSize / 2,
+                y: point.y - handleSize / 2,
+                width: handleSize,
+                height: handleSize
+            )
+            
+            // Weißer Hintergrund
+            context.setFillColor(handleColor.cgColor)
+            context.fill(handleRect)
+            
+            // Roter Rahmen
+            context.setStrokeColor(handleBorderColor.cgColor)
+            context.setLineWidth(2.0)
+            context.stroke(handleRect)
+        }
+        
+        // Zeichne Kanten-Handles (etwas kleiner, rechteckig)
+        let edgeHandleWidth: CGFloat = 20
+        let edgeHandleHeight: CGFloat = 8
+        
+        for (index, point) in edges.enumerated() {
+            var handleRect: CGRect
+            
+            if index < 2 {
+                // Oben/Unten: breiter, flacher
+                handleRect = CGRect(
+                    x: point.x - edgeHandleWidth / 2,
+                    y: point.y - edgeHandleHeight / 2,
+                    width: edgeHandleWidth,
+                    height: edgeHandleHeight
+                )
+            } else {
+                // Links/Rechts: schmaler, höher
+                handleRect = CGRect(
+                    x: point.x - edgeHandleHeight / 2,
+                    y: point.y - edgeHandleWidth / 2,
+                    width: edgeHandleHeight,
+                    height: edgeHandleWidth
+                )
+            }
+            
+            // Weißer Hintergrund
+            context.setFillColor(handleColor.cgColor)
+            context.fill(handleRect)
+            
+            // Roter Rahmen
+            context.setStrokeColor(handleBorderColor.cgColor)
+            context.setLineWidth(2.0)
+            context.stroke(handleRect)
+        }
     }
     
     private func drawInfoText(in imageRect: CGRect, context: CGContext) {
