@@ -62,6 +62,7 @@ class CropCanvasView: NSView {
             width: cropBox.width * scaleX,
             height: cropBox.height * scaleY
         )
+        print("🖼️ draw(): Rufe drawHandles auf mit cropRect: \(cropRect)")
         drawHandles(in: cropRect, context: context!)
         
         // Info-Text zeichnen
@@ -204,9 +205,17 @@ class CropCanvasView: NSView {
         let handleColor = NSColor.white
         let handleBorderColor = NSColor.red
         
+        print("🎯 === DRAW HANDLES DEBUG ===")
+        print("   View Bounds: \(bounds)")
+        print("   Crop Rect:   \(cropRect)")
+        
         // Sicherstellen dass Crop-Rect innerhalb der View-Bounds ist
         let visibleRect = bounds.intersection(cropRect)
-        guard !visibleRect.isEmpty else { return }
+        print("   Visible Intersection: \(visibleRect)")
+        guard !visibleRect.isEmpty else {
+            print("   ⚠️ ABBRUCH: Crop-Rect nicht innerhalb Bounds!")
+            return
+        }
         
         // Eckpunkte (AUF dem Rahmen, nicht innerhalb)
         let corners = [
@@ -215,6 +224,7 @@ class CropCanvasView: NSView {
             CGPoint(x: cropRect.minX, y: cropRect.maxY),  // Oben links
             CGPoint(x: cropRect.maxX, y: cropRect.maxY)   // Oben rechts
         ]
+        print("   Ecken: \(corners)")
         
         // Kantenpunkte (Mitte, AUF dem Rahmen)
         let edges = [
@@ -225,7 +235,8 @@ class CropCanvasView: NSView {
         ]
         
         // Zeichne Ecken-Handles (größer)
-        for point in corners {
+        var cornersDrawn = 0
+        for (index, point) in corners.enumerated() {
             let handleRect = CGRect(
                 x: point.x - handleSize / 2,
                 y: point.y - handleSize / 2,
@@ -233,8 +244,11 @@ class CropCanvasView: NSView {
                 height: handleSize
             )
             
+            let intersects = bounds.intersects(handleRect)
+            print("   Ecke \(index): \(point) → Rect: \(handleRect), intersects: \(intersects)")
+            
             // Nur zeichnen wenn innerhalb der View-Bounds
-            if bounds.intersects(handleRect) {
+            if intersects {
                 // Weißer Hintergrund
                 context.setFillColor(handleColor.cgColor)
                 context.fill(handleRect)
@@ -243,13 +257,16 @@ class CropCanvasView: NSView {
                 context.setStrokeColor(handleBorderColor.cgColor)
                 context.setLineWidth(2.0)
                 context.stroke(handleRect)
+                cornersDrawn += 1
             }
         }
+        print("   ✅ Ecken gezeichnet: \(cornersDrawn)/4")
         
         // Zeichne Kanten-Handles (rechteckig, gut sichtbar)
         let edgeHandleWidth: CGFloat = 30  // Breiter
         let edgeHandleHeight: CGFloat = 10  // Höher
         
+        var edgesDrawn = 0
         for (index, point) in edges.enumerated() {
             var handleRect: CGRect
             
@@ -271,8 +288,12 @@ class CropCanvasView: NSView {
                 )
             }
             
+            let intersects = bounds.intersects(handleRect)
+            let edgeName = ["Unten", "Oben", "Links", "Rechts"][index]
+            print("   Kante \(edgeName): \(point) → Rect: \(handleRect), intersects: \(intersects)")
+            
             // Nur zeichnen wenn innerhalb der View-Bounds
-            if bounds.intersects(handleRect) {
+            if intersects {
                 // Weißer Hintergrund
                 context.setFillColor(handleColor.cgColor)
                 context.fill(handleRect)
@@ -281,8 +302,11 @@ class CropCanvasView: NSView {
                 context.setStrokeColor(handleBorderColor.cgColor)
                 context.setLineWidth(2.0)
                 context.stroke(handleRect)
+                edgesDrawn += 1
             }
         }
+        print("   ✅ Kanten gezeichnet: \(edgesDrawn)/4")
+        print("🎯 === DRAW HANDLES ENDE ===\n")
     }
     
     private func drawInfoText(in imageRect: CGRect, context: CGContext) {
