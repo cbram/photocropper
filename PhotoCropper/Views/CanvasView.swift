@@ -318,11 +318,6 @@ class CropCanvasView: NSView {
         let location = convert(event.locationInWindow, from: nil)
         let delta = CGPoint(x: location.x - dragStartPoint.x, y: location.y - dragStartPoint.y)
         
-        // Debug: Aspect Ratio aktiv?
-        if handle != .center, let ratio = targetAspectRatio {
-            print("🔒 Aspect Ratio Lock aktiv: \(ratio)")
-        }
-        
         // Bild-Rect für Koordinaten-Umrechnung
         let imageRect = calculateImageRect()
         let scaleX = imageSize.width / imageRect.width
@@ -425,6 +420,35 @@ class CropCanvasView: NSView {
         
         // Validieren und begrenzen
         newCropBox = CropEngine.validateCropBox(newCropBox, imageSize: imageSize)
+        
+        // WICHTIG: Nach Validierung Aspect Ratio nochmal korrigieren
+        // Falls die Box an Bildgrenzen stößt, müssen wir die andere Dimension anpassen
+        if let aspectRatio = targetAspectRatio {
+            // Prüfen welche Dimension am Limit ist
+            let widthAtLimit = newCropBox.size.width >= imageSize.width - 1
+            let heightAtLimit = newCropBox.size.height >= imageSize.height - 1
+            
+            if widthAtLimit && !heightAtLimit {
+                // Breite ist am Limit -> Höhe anpassen
+                newCropBox.size.height = min(newCropBox.size.width / aspectRatio, imageSize.height)
+            } else if heightAtLimit && !widthAtLimit {
+                // Höhe ist am Limit -> Breite anpassen
+                newCropBox.size.width = min(newCropBox.size.height * aspectRatio, imageSize.width)
+            } else if widthAtLimit && heightAtLimit {
+                // Beide am Limit -> Aspect Ratio kann nicht gehalten werden, kleinere Dimension gewinnt
+                let maxWidthForHeight = newCropBox.size.height * aspectRatio
+                let maxHeightForWidth = newCropBox.size.width / aspectRatio
+                
+                if maxWidthForHeight <= imageSize.width {
+                    newCropBox.size.width = maxWidthForHeight
+                } else {
+                    newCropBox.size.height = maxHeightForWidth
+                }
+            }
+            
+            // Finale Validierung
+            newCropBox = CropEngine.validateCropBox(newCropBox, imageSize: imageSize)
+        }
         
         // Bei Kanten/Ecken-Drag: Signal für Custom-Ratio senden
         // ABER NUR wenn kein targetAspectRatio gesetzt ist (sonst würden wir das Lock aufheben!)
