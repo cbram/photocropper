@@ -95,21 +95,25 @@ class JPEGService {
         print("📍 Output: \(outputURL.path)")
         print("📐 Crop: \(w)x\(h)+\(x)+\(y)")
         
-        // NEUER ANSATZ: Verwende posix_spawn statt Process()
-        // Das umgeht die "task name port right" Probleme
+        // NEUER ANSATZ: Rufe jpegtran DIREKT auf (nicht über Shell!)
+        // Das vermeidet alle Quoting-Probleme
         
-        // Escape die Anführungszeichen für die Shell oder verwende Backslashes
-        let command = "\(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all '\(imageURL.path)' -outfile '\(outputURL.path)'"
+        let cropArg = "\(w)x\(h)+\(x)+\(y)"
         
-        print("🔧 Führe aus: sh -c \"\(command)\"")
+        print("🔧 Direkter Aufruf: \(jpegtranPath) -crop \(cropArg) -copy all [input] -outfile [output]")
         print("⏳ Starte posix_spawn...")
         
-        // posix_spawn benötigt C-Arrays
+        // posix_spawn benötigt C-Arrays - DIREKT jpegtran aufrufen
         var pid: pid_t = 0
         let argv: [UnsafeMutablePointer<CChar>?] = [
-            strdup("/bin/sh"),
-            strdup("-c"),
-            strdup(command),
+            strdup(jpegtranPath),              // Executable selbst
+            strdup("-crop"),
+            strdup(cropArg),
+            strdup("-copy"),
+            strdup("all"),
+            strdup(imageURL.path),             // Input file
+            strdup("-outfile"),
+            strdup(outputURL.path),            // Output file
             nil
         ]
         
@@ -119,7 +123,7 @@ class JPEGService {
         ]
         
         print("🚀 Rufe posix_spawn auf...")
-        let status = posix_spawn(&pid, "/bin/sh", nil, nil, argv, envp)
+        let status = posix_spawn(&pid, jpegtranPath, nil, nil, argv, envp)
         print("📊 posix_spawn status: \(status), pid: \(pid)")
         
         // Cleanup
