@@ -98,7 +98,8 @@ class JPEGService {
         // NEUER ANSATZ: Verwende posix_spawn statt Process()
         // Das umgeht die "task name port right" Probleme
         
-        let command = "\(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all \"\(imageURL.path)\" -outfile \"\(outputURL.path)\""
+        // Escape die Anführungszeichen für die Shell oder verwende Backslashes
+        let command = "\(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all '\(imageURL.path)' -outfile '\(outputURL.path)'"
         
         print("🔧 Führe aus: sh -c \"\(command)\"")
         print("⏳ Starte posix_spawn...")
