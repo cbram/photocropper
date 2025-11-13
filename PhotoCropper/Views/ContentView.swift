@@ -151,7 +151,7 @@ struct ContentView: View {
                     cropBox: $cropBox,
                     customWidth: $customWidth,
                     customHeight: $customHeight,
-                    imageSize: imageData?.pixelSize ?? .zero,
+                    imageSize: currentDisplayImage?.pixelSize ?? .zero,
                     onCenter: {
                         centerCropBox()
                     },
@@ -182,15 +182,15 @@ struct ContentView: View {
                 Divider()
                 
                 PreviewView(
-                    image: imageData?.image,
+                    image: currentDisplayImage?.image,
                     cropBox: cropBox,
-                    imageSize: imageData?.pixelSize ?? .zero,
+                    imageSize: currentDisplayImage?.pixelSize ?? .zero,
                     targetRatio: effectiveTargetRatio
                 )
                 
                 Divider()
                 
-                InfoPanel(imageData: imageData)
+                InfoPanel(imageData: currentDisplayImage)
                 
                 Spacer()
             }
@@ -327,19 +327,19 @@ struct ContentView: View {
     }
     
     private func updateCropBoxForNewImage() {
-        guard let imageData = imageData else { return }
+        guard let displayImage = currentDisplayImage else { return }
         
         let ratio = effectiveTargetRatio
-        let cropSize = ratio.calculateCropSize(for: imageData.pixelSize)
+        let cropSize = ratio.calculateCropSize(for: displayImage.pixelSize)
         let position = ratio.calculateDefaultPosition(
-            for: imageData.pixelSize,
+            for: displayImage.pixelSize,
             cropSize: cropSize
         )
         
         cropBox = CGRect(origin: position, size: cropSize)
         
         // MCU-Snapping falls aktiv
-        if cropMode == .mcuSensitive, let mcuSize = imageData.mcuSize {
+        if cropMode == .mcuSensitive, let mcuSize = displayImage.mcuSize {
             cropBox = CropEngine.snapToMCUGrid(
                 coordinates: cropBox,
                 mcuSize: mcuSize,
@@ -383,8 +383,8 @@ struct ContentView: View {
     }
     
     private func centerCropBox() {
-        guard let imageData = imageData else { return }
-        cropBox = CropEngine.centerCropBox(cropBox: cropBox, imageSize: imageData.pixelSize)
+        guard let displayImage = currentDisplayImage else { return }
+        cropBox = CropEngine.centerCropBox(cropBox: cropBox, imageSize: displayImage.pixelSize)
     }
     
     private func resetCropBox() {
@@ -392,8 +392,8 @@ struct ContentView: View {
     }
     
     private func maximizeCropBox() {
-        guard let imageData = imageData else { return }
-        cropBox = CropEngine.maximizeCropBox(imageSize: imageData.pixelSize, targetRatio: effectiveTargetRatio)
+        guard let displayImage = currentDisplayImage else { return }
+        cropBox = CropEngine.maximizeCropBox(imageSize: displayImage.pixelSize, targetRatio: effectiveTargetRatio)
     }
     
     private func createCropSettings() -> CropSettings {

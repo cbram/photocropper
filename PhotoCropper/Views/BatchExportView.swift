@@ -307,114 +307,129 @@ struct BatchExportView: View {
     }
     
     private func exportImage(_ item: BatchImageItem, completion: @escaping (ExportResult) -> Void) {
-        guard let cropSettings = item.cropSettings else {
-            completion(ExportResult(
-                filename: item.imageData.url.lastPathComponent,
-                success: false,
-                message: "Keine Crop-Einstellungen"
-            ))
-            return
-        }
-        
-        // Dateiname generieren
-        let baseFilename = ExifDateParser.generateFilename(from: item.imageData)
-        let ratioSuffix = ExifDateParser.suffixForRatio(cropSettings.targetRatio)
-        let nameWithoutExtension = (baseFilename as NSString).deletingPathExtension
-        let extensionString = item.imageData.url.pathExtension
-        let filename = "\(nameWithoutExtension)_\(ratioSuffix).\(extensionString)"
-        
-        // Ziel-URL bestimmen
-        let outputURL: URL
-        if overwriteOriginal {
-            outputURL = item.imageData.url
-        } else {
-            let directory = outputDirectory ?? item.imageData.url.deletingLastPathComponent()
-            outputURL = directory.appendingPathComponent(filename)
-        }
-        
-        // Backup falls gewünscht
-        if createBackup && overwriteOriginal {
-            createBackupFile(for: item.imageData.url)
-        }
-        
-        // Export durchführen
-        if onlyMetadata {
-            // Nur Metadaten: Datei kopieren falls nötig
-            if !overwriteOriginal {
-                do {
-                    try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
-                } catch {
+        // Führe Export in Background-Thread aus
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let cropSettings = item.cropSettings else {
+                DispatchQueue.main.async {
                     completion(ExportResult(
-                        filename: filename,
+                        filename: item.imageData.url.lastPathComponent,
                         success: false,
-                        message: "Kopieren fehlgeschlagen"
+                        message: "Keine Crop-Einstellungen"
                     ))
-                    return
+                }
+                return
+            }
+            
+            // Dateiname generieren
+            let baseFilename = ExifDateParser.generateFilename(from: item.imageData)
+            let ratioSuffix = ExifDateParser.suffixForRatio(cropSettings.targetRatio)
+            let nameWithoutExtension = (baseFilename as NSString).deletingPathExtension
+            let extensionString = item.imageData.url.pathExtension
+            let filename = "\(nameWithoutExtension)_\(ratioSuffix).\(extensionString)"
+        
+            // Ziel-URL bestimmen
+            let outputURL: URL
+            if self.overwriteOriginal {
+                outputURL = item.imageData.url
+            } else {
+                let directory = self.outputDirectory ?? item.imageData.url.deletingLastPathComponent()
+                outputURL = directory.appendingPathComponent(filename)
+            }
+            
+            // Backup falls gewünscht
+            if self.createBackup && self.overwriteOriginal {
+                self.createBackupFile(for: item.imageData.url)
+            }
+            
+            // Export durchführen
+            if self.onlyMetadata {
+                // Nur Metadaten: Datei kopieren falls nötig
+                if !self.overwriteOriginal {
+                    do {
+                        try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
+                    } catch {
+                        DispatchQueue.main.async {
+                            completion(ExportResult(
+                                filename: filename,
+                                success: false,
+                                message: "Kopieren fehlgeschlagen"
+                            ))
+                        }
+                        return
+                    }
+                }
+            } else {
+                // Normaler Export mit Cropping
+                if cropSettings.mode == .mcuSensitive && item.imageData.format == .jpeg {
+                    // MCU-lossless cropping
+                    let result = JPEGService.cropLossless(
+                        imageURL: item.imageData.url,
+                        cropRect: cropSettings.cropBox,
+                        outputURL: outputURL
+                    )
+                    
+                    if case .failure(let error) = result {
+                        DispatchQueue.main.async {
+                            completion(ExportResult(
+                                filename: filename,
+                                success: false,
+                                message: error.localizedDescription
+                            ))
+                        }
+                        return
+                    }
+                } else {
+                    // Standard: Datei kopieren
+                    do {
+                        if FileManager.default.fileExists(atPath: outputURL.path) {
+                            try FileManager.default.removeItem(at: outputURL)
+                        }
+                        try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
+                    } catch {
+                        DispatchQueue.main.async {
+                            completion(ExportResult(
+                                filename: filename,
+                                success: false,
+                                message: "Kopieren fehlgeschlagen"
+                            ))
+                        }
+                        return
+                    }
                 }
             }
-        } else {
-            // Normaler Export mit Cropping
-            if cropSettings.mode == .mcuSensitive && item.imageData.format == .jpeg {
-                // MCU-lossless cropping
-                let result = JPEGService.cropLossless(
-                    imageURL: item.imageData.url,
-                    cropRect: cropSettings.cropBox,
-                    outputURL: outputURL
+            
+            // Metadaten speichern falls gewünscht
+            if self.saveCropMetadata {
+                let result = MetadataService.saveCropMetadata(
+                    imageURL: outputURL,
+                    cropBox: cropSettings.cropBox,
+                    imageSize: item.imageData.pixelSize,
+                    targetRatio: cropSettings.targetRatio,
+                    mode: cropSettings.mode,
+                    originalRatio: cropSettings.originalRatio
                 )
                 
                 if case .failure(let error) = result {
-                    completion(ExportResult(
-                        filename: filename,
-                        success: false,
-                        message: error.localizedDescription
-                    ))
-                    return
-                }
-            } else {
-                // Standard: Datei kopieren
-                do {
-                    if FileManager.default.fileExists(atPath: outputURL.path) {
-                        try FileManager.default.removeItem(at: outputURL)
+                    DispatchQueue.main.async {
+                        completion(ExportResult(
+                            filename: filename,
+                            success: false,
+                            message: "Metadaten-Fehler: \(error.localizedDescription)"
+                        ))
                     }
-                    try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
-                } catch {
-                    completion(ExportResult(
-                        filename: filename,
-                        success: false,
-                        message: "Kopieren fehlgeschlagen"
-                    ))
                     return
                 }
             }
-        }
-        
-        // Metadaten speichern falls gewünscht
-        if saveCropMetadata {
-            let result = MetadataService.saveCropMetadata(
-                imageURL: outputURL,
-                cropBox: cropSettings.cropBox,
-                imageSize: item.imageData.pixelSize,
-                targetRatio: cropSettings.targetRatio,
-                mode: cropSettings.mode,
-                originalRatio: cropSettings.originalRatio
-            )
             
-            if case .failure(let error) = result {
+            // Erfolg!
+            DispatchQueue.main.async {
                 completion(ExportResult(
                     filename: filename,
-                    success: false,
-                    message: "Metadaten-Fehler: \(error.localizedDescription)"
+                    success: true,
+                    message: "OK"
                 ))
-                return
             }
         }
-        
-        // Erfolg!
-        completion(ExportResult(
-            filename: filename,
-            success: true,
-            message: "OK"
-        ))
     }
     
     private func createBackupFile(for url: URL) {
