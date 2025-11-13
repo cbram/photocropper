@@ -192,7 +192,7 @@ class CropCanvasView: NSView {
     }
     
     private func drawHandles(in cropRect: CGRect, context: CGContext) {
-        let handleSize: CGFloat = 12
+        let handleSize: CGFloat = 16  // Größer für bessere Sichtbarkeit
         let handleColor = NSColor.white
         let handleBorderColor = NSColor.red
         
@@ -231,9 +231,9 @@ class CropCanvasView: NSView {
             context.stroke(handleRect)
         }
         
-        // Zeichne Kanten-Handles (etwas kleiner, rechteckig)
-        let edgeHandleWidth: CGFloat = 20
-        let edgeHandleHeight: CGFloat = 8
+        // Zeichne Kanten-Handles (rechteckig, gut sichtbar)
+        let edgeHandleWidth: CGFloat = 30  // Breiter
+        let edgeHandleHeight: CGFloat = 10  // Höher
         
         for (index, point) in edges.enumerated() {
             var handleRect: CGRect
