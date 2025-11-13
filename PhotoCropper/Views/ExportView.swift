@@ -261,13 +261,29 @@ struct ExportView: View {
             }
         }
         
-        // Metadaten speichern (nur wenn Checkbox aktiviert)
+        // SCHRITT 1: Datei erst kopieren/croppen (damit sie am Zielort existiert)
+        if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
+            // Bei MCU-Modus: Verlustfreies Cropping durchführen
+            performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
+        } else {
+            // Standard-Cropping: Bild kopieren
+            copyImage(from: imageData.url, to: outputURL)
+        }
+        
+        // Falls copyImage oder performLosslessCrop fehlgeschlagen ist, abbrechen
+        if exportResult != nil {
+            isExporting = false
+            return
+        }
+        
+        // SCHRITT 2: Metadaten speichern (nur wenn Checkbox aktiviert)
+        // Wichtig: Jetzt in die bereits existierende Ziel-Datei schreiben!
         var metadataSaved = false
         var cropDataString = "Metadaten nicht gespeichert"
         
         if saveCropMetadata {
             let result = MetadataService.saveCropMetadata(
-                imageURL: overwriteOriginal ? imageData.url : outputURL,
+                imageURL: outputURL,  // Immer in die Ziel-Datei schreiben (die jetzt existiert!)
                 cropBox: cropSettings.cropBox,
                 imageSize: imageData.pixelSize,
                 targetRatio: cropSettings.targetRatio,
@@ -288,18 +304,11 @@ struct ExportView: View {
                     cropSettings.targetRatio.id
                 )
             case .failure(let error):
-                exportResult = .failure(error.localizedDescription)
-                isExporting = false
-                return
+                // Warnung bei Metadaten-Fehler, aber Datei ist bereits gespeichert
+                print("⚠️ Metadaten konnten nicht gespeichert werden: \(error)")
+                metadataSaved = false
+                cropDataString = "Fehler beim Speichern: \(error.localizedDescription)"
             }
-        }
-        
-        // Bei MCU-Modus: Verlustfreies Cropping durchführen
-        if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
-            performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
-        } else {
-            // Standard-Cropping: Bild kopieren
-            copyImage(from: imageData.url, to: outputURL)
         }
         
         exportResult = .success(outputURL, metadataSaved: metadataSaved, cropData: cropDataString)
