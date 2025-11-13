@@ -21,6 +21,7 @@ struct BatchExportView: View {
     @State private var currentExportIndex: Int = 0
     @State private var exportResults: [ExportResult] = []
     @State private var showResults: Bool = false
+    @State private var imagesToExport: [BatchImageItem] = []  // Liste wird einmal erstellt!
     
     struct ExportResult {
         let filename: String
@@ -111,8 +112,8 @@ struct BatchExportView: View {
                 // Progress
                 if isExporting {
                     VStack(spacing: 8) {
-                        ProgressView(value: Double(currentExportIndex), total: Double(batchManager.readyCount))
-                        Text("Exportiere \(currentExportIndex + 1) von \(batchManager.readyCount)...")
+                        ProgressView(value: Double(currentExportIndex), total: Double(imagesToExport.count))
+                        Text("Exportiere \(currentExportIndex + 1) von \(imagesToExport.count)...")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -266,20 +267,23 @@ struct BatchExportView: View {
         exportResults = []
         currentExportIndex = 0
         
-        // Exportiere alle Bilder nacheinander
-        exportNextImage()
-    }
-    
-    private func exportNextImage() {
-        let readyImages = batchManager.images.filter { item in
+        // WICHTIG: Liste EINMAL am Anfang erstellen, NICHT bei jedem Aufruf!
+        imagesToExport = batchManager.images.filter { item in
             if case .ready = item.status { return true }
             if case .editing = item.status { return true }
             return false
         }
         
-        print("📊 exportNextImage: currentIndex=\(currentExportIndex), readyCount=\(readyImages.count)")
+        print("🚀 Starte Batch-Export mit \(imagesToExport.count) Bildern")
         
-        guard currentExportIndex < readyImages.count else {
+        // Exportiere alle Bilder nacheinander
+        exportNextImage()
+    }
+    
+    private func exportNextImage() {
+        print("📊 exportNextImage: currentIndex=\(currentExportIndex), totalCount=\(imagesToExport.count)")
+        
+        guard currentExportIndex < imagesToExport.count else {
             // Fertig!
             print("✅ Alle Bilder exportiert!")
             isExporting = false
@@ -287,12 +291,16 @@ struct BatchExportView: View {
             return
         }
         
-        let item = readyImages[currentExportIndex]
-        print("📤 Exportiere Bild \(currentExportIndex + 1): \(item.imageData.url.lastPathComponent)")
+        let item = imagesToExport[currentExportIndex]
+        print("📤 Exportiere Bild \(currentExportIndex + 1)/\(imagesToExport.count): \(item.imageData.url.lastPathComponent)")
         
         // Exportiere Bild
         exportImage(item) { result in
-            print("📥 Export-Ergebnis für Bild \(self.currentExportIndex + 1): \(result.success ? "✅ Erfolg" : "❌ Fehler")")
+            if result.success {
+                print("📥 Export-Ergebnis für Bild \(self.currentExportIndex + 1): ✅ Erfolg - \(result.filename)")
+            } else {
+                print("📥 Export-Ergebnis für Bild \(self.currentExportIndex + 1): ❌ Fehler - \(result.message)")
+            }
             
             self.exportResults.append(result)
             
