@@ -96,43 +96,37 @@ class JPEGService {
         
         print("✅ jpegtran gefunden in: \(jpegtranPath)")
         
+        // Shell-Wrapper verwenden für bessere Kompatibilität
         let task = Process()
-        task.launchPath = jpegtranPath  // launchPath statt executableURL
+        task.launchPath = "/bin/sh"
         
-        // jpegtran -crop WxH+X+Y -copy all input.jpg -outfile output.jpg
-        task.arguments = [
-            "-crop", "\(w)x\(h)+\(x)+\(y)",
-            "-copy", "all",  // Alle Metadaten kopieren
-            imageURL.path,
-            "-outfile", outputURL.path
-        ]
+        // Kompletten Befehl als Shell-Script ausführen
+        let command = "\(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all \"\(imageURL.path)\" -outfile \"\(outputURL.path)\""
+        task.arguments = ["-c", command]
         
         // Umgebungsvariablen setzen (wichtig für subprocess)
-        task.environment = ProcessInfo.processInfo.environment
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        task.environment = environment
         
-        print("🔧 jpegtran Befehl: \(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all \(imageURL.path) -outfile \(outputURL.path)")
+        print("🔧 Shell Befehl: sh -c \"\(command)\"")
         
         let outputPipe = Pipe()
         let errorPipe = Pipe()
         task.standardOutput = outputPipe
         task.standardError = errorPipe
         
-        do {
-            task.launch()  // launch statt run
-            task.waitUntilExit()
-            
-            if task.terminationStatus == 0 {
-                print("✅ jpegtran erfolgreich ausgeführt")
-                return .success(())
-            } else {
-                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                print("❌ jpegtran Fehler: \(errorString)")
-                return .failure(JPEGServiceError.cropFailed(errorString))
-            }
-        } catch {
-            print("❌ jpegtran Exception: \(error.localizedDescription)")
-            return .failure(error)
+        task.launch()
+        task.waitUntilExit()
+        
+        if task.terminationStatus == 0 {
+            print("✅ jpegtran erfolgreich ausgeführt")
+            return .success(())
+        } else {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            print("❌ jpegtran Fehler (exit \(task.terminationStatus)): \(errorString)")
+            return .failure(JPEGServiceError.cropFailed(errorString))
         }
     }
     

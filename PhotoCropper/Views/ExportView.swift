@@ -199,6 +199,7 @@ struct ExportView: View {
         .frame(width: 500, height: 400)
         .onAppear {
             setupDefaultFilename()
+            setupDefaultOutputDirectory()
         }
     }
     
@@ -212,6 +213,13 @@ struct ExportView: View {
         let extensionString = imageData.url.pathExtension
         
         filename = "\(nameWithoutExtension)_\(ratioSuffix).\(extensionString)"
+    }
+    
+    private func setupDefaultOutputDirectory() {
+        guard let imageData = imageData else { return }
+        
+        // Standard-Zielordner ist der Ordner des Original-Fotos
+        outputDirectory = imageData.url.deletingLastPathComponent()
     }
     
     private func selectOutputDirectory() {
