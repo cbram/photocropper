@@ -10,6 +10,10 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    @StateObject private var batchManager = BatchImageManager()
+    @State private var isBatchMode: Bool = false
+    
+    // Single-Image Modus
     @State private var imageData: ImageData?
     @State private var cropBox: CGRect = .zero
     @State private var targetRatio: AspectRatio = .ratio16_9
@@ -19,8 +23,7 @@ struct ContentView: View {
     @State private var customWidth: String = "16"
     @State private var customHeight: String = "9"
     @State private var showExportView: Bool = false
-    @State private var batchImages: [ImageData] = []
-    @State private var currentBatchIndex: Int = 0
+    @State private var showBatchExport: Bool = false
     
     // Computed property für Custom-Ratio
     private var effectiveTargetRatio: AspectRatio {
@@ -34,44 +37,72 @@ struct ContentView: View {
     
     var body: some View {
         HSplitView {
-            // Canvas-Bereich (70%)
+            // Batch-Liste (falls Batch-Modus)
+            if isBatchMode {
+                BatchImageListView(batchManager: batchManager)
+                    .onDrop(of: [.fileURL], delegate: BatchDropDelegate(batchManager: batchManager, onDrop: { urls in
+                        loadBatchImages(from: urls)
+                    }))
+            }
+            
+            // Canvas-Bereich
             VStack {
                 // Top Navigation
                 HStack {
-                    Button("← Zurück") {
-                        // Navigation zurück
+                    // Mode Toggle
+                    Picker("Modus", selection: $isBatchMode) {
+                        Text("Einzelbild").tag(false)
+                        Text("Batch").tag(true)
                     }
-                    .disabled(true)
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
                     
                     Spacer()
                     
-                    Button("Speichern") {
-                        showExportView = true
-                    }
-                    .disabled(imageData == nil)
-                    
-                    Button("Hilfe") {
-                        // Hilfe anzeigen
+                    if isBatchMode {
+                        Button(action: {
+                            batchManager.markCurrentAsReadyAndNext()
+                        }) {
+                            HStack {
+                                Image(systemName: "checkmark.circle")
+                                Text("Fertig & Weiter")
+                            }
+                        }
+                        .disabled(batchManager.currentImage == nil)
+                        
+                        Button(action: {
+                            showBatchExport = true
+                        }) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.down.on.square")
+                                Text("Alle speichern")
+                            }
+                        }
+                        .disabled(!batchManager.allReady)
+                    } else {
+                        Button("Speichern") {
+                            showExportView = true
+                        }
+                        .disabled(imageData == nil)
                     }
                 }
                 .padding()
                 
                 // Canvas
-                if let imageData = imageData {
+                if let displayImageData = currentDisplayImage {
                     CanvasView(
                         image: Binding(
-                            get: { imageData.image },
+                            get: { displayImageData.image },
                             set: { _ in }
                         ),
                         cropBox: $cropBox,
-                        imageSize: imageData.pixelSize,
+                        imageSize: displayImageData.pixelSize,
                         showMCUGrid: showMCUGrid,
-                        mcuSize: imageData.mcuSize ?? CGSize(width: 8, height: 8),
+                        mcuSize: displayImageData.mcuSize ?? CGSize(width: 8, height: 8),
                         onCropBoxChanged: { newBox in
                             updateCropBox(newBox)
                         },
                         onRatioChanged: {
-                            // Automatisch zu Custom-Ratio wechseln
                             switchToCustomRatio()
                         }
                     )
@@ -82,18 +113,31 @@ struct ContentView: View {
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
                             .overlay(
-                                VStack {
-                                    Image(systemName: "photo.on.rectangle")
+                                VStack(spacing: 12) {
+                                    Image(systemName: isBatchMode ? "photo.stack" : "photo.on.rectangle")
                                         .font(.system(size: 48))
                                         .foregroundColor(.secondary)
-                                    Text("Bild hier ablegen oder Datei öffnen")
-                                        .foregroundColor(.secondary)
+                                    if isBatchMode {
+                                        Text("Mehrere Bilder hier ablegen")
+                                            .foregroundColor(.secondary)
+                                        Text("oder Dateien öffnen")
+                                            .foregroundColor(.secondary)
+                                            .font(.caption)
+                                    } else {
+                                        Text("Bild hier ablegen oder Datei öffnen")
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             )
                     }
-                    .onDrop(of: [.image, .fileURL], delegate: ImageDropDelegate(onDrop: { url in
-                        loadImage(from: url)
-                    }))
+                    .onDrop(of: [.fileURL], delegate: isBatchMode ? 
+                        BatchDropDelegate(batchManager: batchManager, onDrop: { urls in
+                            loadBatchImages(from: urls)
+                        }) : 
+                        ImageDropDelegate(onDrop: { url in
+                            loadImage(from: url)
+                        })
+                    )
                 }
             }
             
@@ -161,12 +205,38 @@ struct ContentView: View {
                 )
             }
         }
+        .sheet(isPresented: $showBatchExport) {
+            BatchExportView(
+                isPresented: $showBatchExport,
+                batchManager: batchManager
+            )
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: openFile) {
                     Label("Öffnen", systemImage: "folder")
                 }
             }
+        }
+        .onChange(of: isBatchMode) { oldValue, newValue in
+            // Beim Wechsel zwischen Modi synchronisieren
+            syncBatchAndSingleMode()
+        }
+        .onChange(of: batchManager.currentIndex) { oldValue, newValue in
+            // Wenn in Batch-Modus neues Bild ausgewählt wird
+            if isBatchMode {
+                loadCurrentBatchImage()
+            }
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
+    var currentDisplayImage: ImageData? {
+        if isBatchMode {
+            return batchManager.currentImage?.imageData
+        } else {
+            return imageData
         }
     }
     
@@ -187,10 +257,72 @@ struct ContentView: View {
     private func openFile() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.jpeg, .heic, .png, .tiff]
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = isBatchMode
         
-        if panel.runModal() == .OK, let url = panel.url {
-            loadImage(from: url)
+        if panel.runModal() == .OK {
+            if isBatchMode {
+                loadBatchImages(from: panel.urls)
+            } else if let url = panel.url {
+                loadImage(from: url)
+            }
+        }
+    }
+    
+    private func loadBatchImages(from urls: [URL]) {
+        let imageDatas = urls.compactMap { ImageService.loadImage(from: $0) }
+        
+        // MCU-Größe für JPEGs bestimmen
+        for (index, url) in urls.enumerated() {
+            if imageDatas[index].format == .jpeg {
+                imageDatas[index].mcuSize = JPEGService.detectMCUSize(for: url)
+            }
+        }
+        
+        batchManager.addImages(imageDatas)
+        
+        // Lade erstes Bild
+        if batchManager.hasImages {
+            loadCurrentBatchImage()
+        }
+    }
+    
+    private func loadCurrentBatchImage() {
+        guard let currentItem = batchManager.currentImage else { return }
+        
+        // Lade Crop-Settings aus BatchItem
+        if let settings = currentItem.cropSettings {
+            cropBox = settings.cropBox
+            targetRatio = settings.targetRatio
+            cropMode = settings.mode
+            
+            // Custom-Ratio Werte setzen
+            if case .custom(let w, let h) = settings.targetRatio {
+                customWidth = String(w)
+                customHeight = String(h)
+            }
+        } else {
+            // Initiale Crop-Box berechnen
+            updateCropBoxForNewImage()
+        }
+    }
+    
+    private func syncBatchAndSingleMode() {
+        if isBatchMode {
+            // Von Single zu Batch: Aktuelles Bild in Batch übernehmen
+            if let imageData = imageData {
+                batchManager.addImages([imageData])
+                loadCurrentBatchImage()
+            }
+        } else {
+            // Von Batch zu Single: Aktuelles Batch-Bild übernehmen
+            if let currentItem = batchManager.currentImage {
+                imageData = currentItem.imageData
+                if let settings = currentItem.cropSettings {
+                    cropBox = settings.cropBox
+                    targetRatio = settings.targetRatio
+                    cropMode = settings.mode
+                }
+            }
         }
     }
     
@@ -219,8 +351,10 @@ struct ContentView: View {
     private func updateCropBox(_ newBox: CGRect) {
         var updatedBox = newBox
         
+        let displayImage = currentDisplayImage
+        
         // MCU-Snapping falls aktiv
-        if cropMode == .mcuSensitive, let imageData = imageData, let mcuSize = imageData.mcuSize {
+        if cropMode == .mcuSensitive, let displayImage = displayImage, let mcuSize = displayImage.mcuSize {
             updatedBox = CropEngine.snapToMCUGrid(
                 coordinates: updatedBox,
                 mcuSize: mcuSize,
@@ -229,11 +363,23 @@ struct ContentView: View {
         }
         
         // Validieren
-        if let imageData = imageData {
-            updatedBox = CropEngine.validateCropBox(updatedBox, imageSize: imageData.pixelSize)
+        if let displayImage = displayImage {
+            updatedBox = CropEngine.validateCropBox(updatedBox, imageSize: displayImage.pixelSize)
         }
         
         cropBox = updatedBox
+        
+        // In Batch-Modus: Settings im BatchManager speichern
+        if isBatchMode, let currentItem = batchManager.currentImage {
+            let settings = CropSettings(
+                cropBox: updatedBox,
+                targetRatio: effectiveTargetRatio,
+                mode: cropMode,
+                originalRatio: currentItem.imageData.aspectRatioString,
+                mcuSize: currentItem.imageData.mcuSize
+            )
+            currentItem.cropSettings = settings
+        }
     }
     
     private func centerCropBox() {
@@ -278,7 +424,7 @@ struct ContentView: View {
     }
 }
 
-/// Drag & Drop Delegate für Bilder
+/// Drag & Drop Delegate für einzelne Bilder
 struct ImageDropDelegate: DropDelegate {
     let onDrop: (URL) -> Void
     
@@ -302,6 +448,51 @@ struct ImageDropDelegate: DropDelegate {
                 } else if let url = urlData as? URL {
                     onDrop(url)
                 }
+            }
+        }
+        
+        return true
+    }
+    
+    func validateDrop(info: DropInfo) -> Bool {
+        return info.hasItemsConforming(to: [.fileURL])
+    }
+}
+
+/// Drag & Drop Delegate für Batch-Modus (mehrere Bilder)
+struct BatchDropDelegate: DropDelegate {
+    @ObservedObject var batchManager: BatchImageManager
+    let onDrop: ([URL]) -> Void
+    
+    func performDrop(info: DropInfo) -> Bool {
+        let itemProviders = info.itemProviders(for: [.fileURL])
+        guard !itemProviders.isEmpty else { return false }
+        
+        var urls: [URL] = []
+        let group = DispatchGroup()
+        
+        for itemProvider in itemProviders {
+            group.enter()
+            itemProvider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { (urlData, error) in
+                defer { group.leave() }
+                
+                if let error = error {
+                    print("Fehler beim Laden: \(error)")
+                    return
+                }
+                
+                if let urlData = urlData as? Data {
+                    let url = NSURL(absoluteURLWithDataRepresentation: urlData, relativeTo: nil) as URL
+                    urls.append(url)
+                } else if let url = urlData as? URL {
+                    urls.append(url)
+                }
+            }
+        }
+        
+        group.notify(queue: .main) {
+            if !urls.isEmpty {
+                onDrop(urls)
             }
         }
         
