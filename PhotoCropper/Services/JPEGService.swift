@@ -14,21 +14,17 @@ class JPEGService {
     
     /// Prüft ob jpegtran verfügbar ist
     static func isJPEGTranAvailable() -> Bool {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        task.arguments = ["jpegtran"]
+        // Prüfe bekannte Installationsorte
+        let possiblePaths = [
+            "/opt/homebrew/bin/jpegtran",  // Homebrew auf Apple Silicon
+            "/usr/local/bin/jpegtran",      // Homebrew auf Intel
+            "/usr/bin/jpegtran",            // System-Installation
+            "/opt/local/bin/jpegtran"       // MacPorts
+        ]
         
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = Pipe()
-        
-        do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } catch {
-            return false
-        }
+        let available = possiblePaths.contains { FileManager.default.fileExists(atPath: $0) }
+        print("🔍 jpegtran verfügbar: \(available)")
+        return available
     }
     
     /// Extrahiert MCU-Größe aus JPEG (vereinfacht: typischerweise 8x8, 8x16 oder 16x16)
@@ -95,6 +91,9 @@ class JPEGService {
         }
         
         print("✅ jpegtran gefunden in: \(jpegtranPath)")
+        print("📍 Input:  \(imageURL.path)")
+        print("📍 Output: \(outputURL.path)")
+        print("📐 Crop: \(w)x\(h)+\(x)+\(y)")
         
         // NEUER ANSATZ: Verwende posix_spawn statt Process()
         // Das umgeht die "task name port right" Probleme
@@ -102,6 +101,7 @@ class JPEGService {
         let command = "\(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all \"\(imageURL.path)\" -outfile \"\(outputURL.path)\""
         
         print("🔧 Führe aus: sh -c \"\(command)\"")
+        print("⏳ Starte posix_spawn...")
         
         // posix_spawn benötigt C-Arrays
         var pid: pid_t = 0
@@ -117,24 +117,34 @@ class JPEGService {
             nil
         ]
         
+        print("🚀 Rufe posix_spawn auf...")
         let status = posix_spawn(&pid, "/bin/sh", nil, nil, argv, envp)
+        print("📊 posix_spawn status: \(status), pid: \(pid)")
         
         // Cleanup
         argv.forEach { if let ptr = $0 { free(ptr) } }
         envp.forEach { if let ptr = $0 { free(ptr) } }
         
         if status == 0 {
+            print("⏱️ Warte auf Prozess-Ende (pid: \(pid))...")
             // Warte auf Prozess-Ende
             var exitStatus: Int32 = 0
-            waitpid(pid, &exitStatus, 0)
+            let waitResult = waitpid(pid, &exitStatus, 0)
+            print("📊 waitpid result: \(waitResult), exitStatus: \(exitStatus)")
             
             let actualExit = (exitStatus >> 8) & 0xFF  // Extrahiere echten Exit-Code
+            print("📊 Extrahierter Exit-Code: \(actualExit)")
             
             if actualExit == 0 {
                 print("✅ jpegtran erfolgreich ausgeführt")
                 
                 // Prüfe ob Output-Datei existiert
-                if FileManager.default.fileExists(atPath: outputURL.path) {
+                let fileExists = FileManager.default.fileExists(atPath: outputURL.path)
+                print("📁 Output-Datei existiert: \(fileExists)")
+                
+                if fileExists {
+                    let fileSize = try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64
+                    print("📏 Output-Datei Größe: \(fileSize ?? 0) bytes")
                     return .success(())
                 } else {
                     print("❌ Output-Datei wurde nicht erstellt")
@@ -146,7 +156,9 @@ class JPEGService {
             }
         } else {
             print("❌ posix_spawn fehlgeschlagen mit status: \(status)")
-            return .failure(JPEGServiceError.cropFailed("posix_spawn failed: \(status)"))
+            let errorStr = String(cString: strerror(status))
+            print("❌ Error: \(errorStr)")
+            return .failure(JPEGServiceError.cropFailed("posix_spawn failed: \(status) - \(errorStr)"))
         }
     }
     

@@ -236,6 +236,10 @@ struct ExportView: View {
     private func exportImage() {
         guard let imageData = imageData, let cropSettings = cropSettings else { return }
         
+        print("\n" + String(repeating: "=", count: 80))
+        print("🎬 EXPORT GESTARTET")
+        print(String(repeating: "=", count: 80))
+        
         isExporting = true
         
         // Security-Scoped Resource Access starten
@@ -270,13 +274,21 @@ struct ExportView: View {
         }
         
         // SCHRITT 1: Datei erst kopieren/croppen (damit sie am Zielort existiert)
+        print("\n📋 SCHRITT 1: Datei kopieren/croppen")
+        print("  Mode: \(cropSettings.mode.rawValue)")
+        print("  Format: \(imageData.format)")
+        
         if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
+            print("  🔄 MCU-Modus: Rufe performLosslessCrop auf...")
             // Bei MCU-Modus: Verlustfreies Cropping durchführen
             performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
         } else {
+            print("  📄 Standard-Modus: Kopiere Datei...")
             // Standard-Cropping: Bild kopieren
             copyImage(from: imageData.url, to: outputURL)
         }
+        
+        print("  ✓ Schritt 1 abgeschlossen")
         
         // Falls copyImage oder performLosslessCrop fehlgeschlagen ist, abbrechen
         if exportResult != nil {
@@ -320,6 +332,10 @@ struct ExportView: View {
         }
         
         exportResult = .success(outputURL, metadataSaved: metadataSaved, cropData: cropDataString)
+        
+        print("\n" + String(repeating: "=", count: 80))
+        print("✅ EXPORT ERFOLGREICH ABGESCHLOSSEN")
+        print(String(repeating: "=", count: 80) + "\n")
         
         isExporting = false
     }
