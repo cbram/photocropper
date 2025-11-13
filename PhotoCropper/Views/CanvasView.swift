@@ -72,9 +72,10 @@ class CropCanvasView: NSView {
     }
     
     private func calculateImageRect() -> CGRect {
-        guard let image = image else { return .zero }
+        guard image != nil else { return .zero }
         
-        let imageAspect = image.size.width / image.size.height
+        // WICHTIG: imageSize verwenden (Pixel), nicht image.size (Points)!
+        let imageAspect = imageSize.width / imageSize.height
         let viewAspect = bounds.width / bounds.height
         
         var imageRect: CGRect
