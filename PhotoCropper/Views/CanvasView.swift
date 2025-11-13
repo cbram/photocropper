@@ -78,13 +78,6 @@ class CropCanvasView: NSView {
         let imageAspect = imageSize.width / imageSize.height
         let viewAspect = bounds.width / bounds.height
         
-        // Debug
-        print("📐 calculateImageRect:")
-        print("   imageSize (Pixel): \(imageSize)")
-        print("   bounds: \(bounds.size)")
-        print("   imageAspect: \(imageAspect)")
-        print("   viewAspect: \(viewAspect)")
-        
         var imageRect: CGRect
         
         if imageAspect > viewAspect {
@@ -97,7 +90,6 @@ class CropCanvasView: NSView {
                 width: width,
                 height: height
             )
-            print("   → Bild ist breiter, imageRect: \(imageRect)")
         } else {
             // Bild ist höher → Höhe bestimmt Größe (fill height)
             let height = bounds.height
@@ -108,7 +100,6 @@ class CropCanvasView: NSView {
                 width: width,
                 height: height
             )
-            print("   → Bild ist höher, imageRect: \(imageRect)")
         }
         
         return imageRect
@@ -171,11 +162,6 @@ class CropCanvasView: NSView {
         let scaleX = imageRect.width / imageSize.width
         let scaleY = imageRect.height / imageSize.height
         
-        print("📦 drawCropBox:")
-        print("   cropBox (Pixel): \(cropBox)")
-        print("   imageRect (View): \(imageRect)")
-        print("   scaleX: \(scaleX), scaleY: \(scaleY)")
-        
         // Y-Achse invertieren für NSView-Koordinatensystem
         let cropRect = CGRect(
             x: imageRect.origin.x + cropBox.origin.x * scaleX,
@@ -183,8 +169,6 @@ class CropCanvasView: NSView {
             width: cropBox.width * scaleX,
             height: cropBox.height * scaleY
         )
-        
-        print("   cropRect (View): \(cropRect)")
         
         // Roter Rahmen (2-3px Dicke)
         context.setStrokeColor(NSColor.red.cgColor)
@@ -476,11 +460,13 @@ class CropCanvasView: NSView {
         
         cropBox = newCropBox
         
-        // Throttle Display-Updates UND Callbacks für flüssigeres Dragging
+        // Display IMMER sofort updaten (kein Throttling für visuelle Darstellung)
+        needsDisplay = true
+        
+        // Nur Callback throttlen (für Performance bei Slider-Updates etc.)
         let now = Date()
         if now.timeIntervalSince(lastDisplayUpdate) >= displayThrottleInterval {
             onCropBoxChanged?(cropBox)
-            needsDisplay = true
             lastDisplayUpdate = now
         }
     }
