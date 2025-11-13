@@ -358,18 +358,24 @@ struct BatchExportView: View {
                 self.createBackupFile(for: item.imageData.url)
             }
             
+            print("📂 Ziel: \(outputURL.path)")
+            print("📄 Quelle: \(item.imageData.url.path)")
+            print("⚙️ Mode: \(self.onlyMetadata ? "Nur Metadaten" : "Normal"), Overwrite: \(self.overwriteOriginal)")
+            
             // Export durchführen
             if self.onlyMetadata {
                 // Nur Metadaten: Datei kopieren falls nötig
                 if !self.overwriteOriginal {
                     do {
+                        print("📋 Kopiere für Metadaten-Modus...")
                         try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
                     } catch {
+                        print("❌ Kopieren fehlgeschlagen: \(error.localizedDescription)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
                                 success: false,
-                                message: "Kopieren fehlgeschlagen"
+                                message: "Kopieren fehlgeschlagen: \(error.localizedDescription)"
                             ))
                         }
                         return
@@ -378,6 +384,7 @@ struct BatchExportView: View {
             } else {
                 // Normaler Export mit Cropping
                 if cropSettings.mode == .mcuSensitive && item.imageData.format == .jpeg {
+                    print("✂️ MCU-Lossless Cropping...")
                     // MCU-lossless cropping
                     let result = JPEGService.cropLossless(
                         imageURL: item.imageData.url,
@@ -386,6 +393,7 @@ struct BatchExportView: View {
                     )
                     
                     if case .failure(let error) = result {
+                        print("❌ MCU-Cropping fehlgeschlagen: \(error.localizedDescription)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
@@ -396,18 +404,22 @@ struct BatchExportView: View {
                         return
                     }
                 } else {
+                    print("📋 Standard-Modus: Kopiere Datei...")
                     // Standard: Datei kopieren
                     do {
                         if FileManager.default.fileExists(atPath: outputURL.path) {
+                            print("🗑️ Entferne existierende Datei...")
                             try FileManager.default.removeItem(at: outputURL)
                         }
                         try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
+                        print("✅ Datei kopiert")
                     } catch {
+                        print("❌ Kopieren fehlgeschlagen: \(error.localizedDescription)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
                                 success: false,
-                                message: "Kopieren fehlgeschlagen"
+                                message: "Kopieren fehlgeschlagen: \(error.localizedDescription)"
                             ))
                         }
                         return
