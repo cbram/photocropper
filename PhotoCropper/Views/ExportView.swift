@@ -203,66 +203,80 @@ struct ExportView: View {
                     }
                 }
                 
-                Spacer()
-                
-                // Buttons - Variieren je nach Status
-                HStack(spacing: 12) {
-                    if exportResult != nil {
-                        // Nach Export: Nur OK Button zum Schließen
-                        Button(action: {
-                            exportResult = nil
-                            isPresented = false
-                        }) {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                Text("OK")
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
+            }
+            
+            Spacer()
+            
+            // Buttons - Variieren je nach Status - IMMER außerhalb des if imageData
+            HStack(spacing: 12) {
+                if exportResult != nil {
+                    // Nach Export: Nur OK Button zum Schließen
+                    Button(action: {
+                        exportResult = nil
+                        isPresented = false
+                    }) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("OK")
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        // Vor Export: Abbrechen + Speichern
-                        Button(action: {
-                            isPresented = false
-                        }) {
-                            HStack {
-                                Image(systemName: "xmark.circle")
-                                Text("Abbrechen")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                } else if imageData != nil {
+                    // Vor Export: Abbrechen + Speichern
+                    Button(action: {
+                        isPresented = false
+                    }) {
+                        HStack {
+                            Image(systemName: "xmark.circle")
+                            Text("Abbrechen")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.2))
+                        .foregroundColor(.primary)
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: {
+                        exportImage()
+                    }) {
+                        HStack {
+                            if isExporting {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Image(systemName: "square.and.arrow.down.fill")
                             }
+                            Text(isExporting ? "Speichere..." : "Speichern")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(filename.isEmpty || isExporting ? Color.blue.opacity(0.5) : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isExporting || filename.isEmpty)
+                } else {
+                    // Kein Bild geladen: Nur Schließen
+                    Button(action: {
+                        isPresented = false
+                    }) {
+                        Text("Schließen")
                             .frame(maxWidth: .infinity)
                             .padding()
                             .background(Color.gray.opacity(0.2))
                             .foregroundColor(.primary)
                             .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Button(action: {
-                            exportImage()
-                        }) {
-                            HStack {
-                                if isExporting {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                } else {
-                                    Image(systemName: "square.and.arrow.down.fill")
-                                }
-                                Text(isExporting ? "Speichere..." : "Speichern")
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(filename.isEmpty || isExporting ? Color.blue.opacity(0.5) : Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isExporting || filename.isEmpty)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
