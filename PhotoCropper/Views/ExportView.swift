@@ -19,6 +19,7 @@ struct ExportView: View {
     @State private var overwriteOriginal: Bool = false
     @State private var createBackup: Bool = false
     @State private var saveCropMetadata: Bool = true  // Neue Option für EXIF-Speicherung
+    @State private var onlyMetadata: Bool = false  // NUR Metadaten speichern, nicht croppen
     @State private var isExporting: Bool = false
     @State private var exportResult: ExportResult?
     
@@ -66,26 +67,55 @@ struct ExportView: View {
                     
                     Divider()
                     
-                    VStack(alignment: .leading, spacing: 4) {
+    VStack(alignment: .leading, spacing: 8) {
                         Toggle("Crop-Daten in EXIF speichern", isOn: $saveCropMetadata)
                             .fontWeight(saveCropMetadata ? .semibold : .regular)
                         
                         if saveCropMetadata {
-                            HStack(spacing: 4) {
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.blue)
-                                    .font(.caption)
-                                Text("DefaultCropOrigin, DefaultCropSize & XMP Tags werden gespeichert")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "info.circle")
+                                        .foregroundColor(.blue)
+                                        .font(.caption)
+                                    Text("DefaultCropOrigin, DefaultCropSize & XMP Tags werden gespeichert")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.leading, 20)
+                                
+                                // Zusätzliche Option: Nur Metadaten
+                                Toggle("Nur Metadaten (Bild nicht physisch croppen)", isOn: $onlyMetadata)
+                                    .font(.callout)
+                                    .padding(.leading, 20)
+                                
+                                if onlyMetadata {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "tag.fill")
+                                            .foregroundColor(.purple)
+                                            .font(.caption)
+                                        Text("Bild bleibt unverändert, nur EXIF-Tags werden geschrieben")
+                                            .font(.caption2)
+                                            .foregroundColor(.purple)
+                                    }
+                                    .padding(.leading, 40)
+                                } else {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "crop")
+                                            .foregroundColor(.green)
+                                            .font(.caption)
+                                        Text("Bild wird gecroppt UND EXIF-Tags werden geschrieben")
+                                            .font(.caption2)
+                                            .foregroundColor(.green)
+                                    }
+                                    .padding(.leading, 40)
+                                }
                             }
-                            .padding(.leading, 20)
                         } else {
                             HStack(spacing: 4) {
                                 Image(systemName: "exclamationmark.triangle")
                                     .foregroundColor(.orange)
                                     .font(.caption)
-                                Text("Nur Datei wird gespeichert, keine EXIF Crop-Metadaten")
+                                Text("Bild wird gecroppt, aber keine EXIF Crop-Metadaten")
                                     .font(.caption2)
                                     .foregroundColor(.orange)
                             }
@@ -138,6 +168,19 @@ struct ExportView: View {
                                         }
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
+                                        
+                                        // Zeige ob Bild gecroppt wurde oder nicht
+                                        if cropData.contains("NUR METADATEN") {
+                                            HStack {
+                                                Image(systemName: "info.circle.fill")
+                                                    .foregroundColor(.purple)
+                                                Text("Bild wurde NICHT gecroppt (nur Metadaten)")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.purple)
+                                                    .fontWeight(.semibold)
+                                            }
+                                            .padding(.top, 4)
+                                        }
                                         
                                         Text(cropData)
                                             .font(.caption2)
@@ -295,19 +338,32 @@ struct ExportView: View {
             }
         }
         
-        // SCHRITT 1: Datei erst kopieren/croppen (damit sie am Zielort existiert)
-        print("\n📋 SCHRITT 1: Datei kopieren/croppen")
+        // SCHRITT 1: Datei kopieren/croppen (oder nur bei Metadaten-Only überspringen)
+        print("\n📋 SCHRITT 1: Datei vorbereiten")
         print("  Mode: \(cropSettings.mode.rawValue)")
         print("  Format: \(imageData.format)")
+        print("  Nur Metadaten: \(onlyMetadata)")
         
-        if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
-            print("  🔄 MCU-Modus: Rufe performLosslessCrop auf...")
-            // Bei MCU-Modus: Verlustfreies Cropping durchführen
-            performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
+        if onlyMetadata {
+            // NUR METADATEN: Originalfile wird direkt mit Metadaten beschrieben
+            print("  📋 Nur-Metadaten-Modus: Kein Cropping, Original wird behalten")
+            // Bei "Original überschreiben" wird direkt ins Original geschrieben
+            // Ansonsten erst kopieren, dann Metadaten schreiben
+            if !overwriteOriginal {
+                print("  📄 Kopiere Original zu Zielort...")
+                copyImage(from: imageData.url, to: outputURL)
+            }
         } else {
-            print("  📄 Standard-Modus: Kopiere Datei...")
-            // Standard-Cropping: Bild kopieren
-            copyImage(from: imageData.url, to: outputURL)
+            // NORMALER MODUS: Bild wird physisch gecroppt
+            if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
+                print("  🔄 MCU-Modus: Rufe performLosslessCrop auf...")
+                // Bei MCU-Modus: Verlustfreies Cropping durchführen
+                performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
+            } else {
+                print("  📄 Standard-Modus: Kopiere Datei...")
+                // Standard-Cropping: Bild kopieren
+                copyImage(from: imageData.url, to: outputURL)
+            }
         }
         
         print("  ✓ Schritt 1 abgeschlossen")
@@ -338,11 +394,12 @@ struct ExportView: View {
                 metadataSaved = true
                 // Erstelle Crop-Data String für Anzeige
                 let normalized = cropSettings.normalizedCoordinates(for: imageData.pixelSize)
+                let modeString = onlyMetadata ? "NUR METADATEN" : cropSettings.mode.rawValue
                 cropDataString = String(format: 
                     "Origin: (%.3f, %.3f)\nSize: (%.3f, %.3f)\nMode: %@\nRatio: %@",
                     normalized.origin.x, normalized.origin.y,
                     normalized.size.width, normalized.size.height,
-                    cropSettings.mode.rawValue,
+                    modeString,
                     cropSettings.targetRatio.id
                 )
             case .failure(let error):
