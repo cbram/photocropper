@@ -18,6 +18,7 @@ struct ExportView: View {
     @State private var outputDirectory: URL?
     @State private var overwriteOriginal: Bool = false
     @State private var createBackup: Bool = false
+    @State private var saveCropMetadata: Bool = true  // Neue Option für EXIF-Speicherung
     @State private var isExporting: Bool = false
     @State private var exportResult: ExportResult?
     
@@ -62,6 +63,35 @@ struct ExportView: View {
                         .foregroundColor(overwriteOriginal ? .red : .primary)
                     
                     Toggle("Backup des Originals erstellen", isOn: $createBackup)
+                    
+                    Divider()
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Crop-Daten in EXIF speichern", isOn: $saveCropMetadata)
+                            .fontWeight(saveCropMetadata ? .semibold : .regular)
+                        
+                        if saveCropMetadata {
+                            HStack(spacing: 4) {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.blue)
+                                    .font(.caption)
+                                Text("DefaultCropOrigin, DefaultCropSize & XMP Tags werden gespeichert")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.leading, 20)
+                        } else {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                                Text("Nur Datei wird gespeichert, keine EXIF Crop-Metadaten")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                            }
+                            .padding(.leading, 20)
+                        }
+                    }
                 }
                 
                 // Ergebnis-Anzeige
@@ -113,13 +143,22 @@ struct ExportView: View {
                                 }
                                 .padding(.vertical, 4)
                             } else {
-                                HStack {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundColor(.orange)
-                                    Text("Metadaten konnten nicht gespeichert werden")
-                                        .font(.caption)
-                                        .foregroundColor(.orange)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Image(systemName: "info.circle.fill")
+                                            .foregroundColor(.gray)
+                                        Text("EXIF Crop-Metadaten:")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    Text("Nicht gespeichert (Checkbox war deaktiviert)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .italic()
                                 }
+                                .padding(.vertical, 4)
                             }
                         }
                         .padding(8)
@@ -206,40 +245,48 @@ struct ExportView: View {
             outputURL = directory.appendingPathComponent(finalFilename)
         }
         
-        // Metadaten speichern
-        let result = MetadataService.saveCropMetadata(
-            imageURL: overwriteOriginal ? imageData.url : outputURL,
-            cropBox: cropSettings.cropBox,
-            imageSize: imageData.pixelSize,
-            targetRatio: cropSettings.targetRatio,
-            mode: cropSettings.mode,
-            originalRatio: cropSettings.originalRatio
-        )
+        // Metadaten speichern (nur wenn Checkbox aktiviert)
+        var metadataSaved = false
+        var cropDataString = "Metadaten nicht gespeichert"
         
-        switch result {
-        case .success:
-            // Erstelle Crop-Data String für Anzeige
-            let normalized = cropSettings.normalizedCoordinates(for: imageData.pixelSize)
-            let cropDataString = String(format: 
-                "Origin: (%.3f, %.3f)\nSize: (%.3f, %.3f)\nMode: %@\nRatio: %@",
-                normalized.origin.x, normalized.origin.y,
-                normalized.size.width, normalized.size.height,
-                cropSettings.mode.rawValue,
-                cropSettings.targetRatio.id
+        if saveCropMetadata {
+            let result = MetadataService.saveCropMetadata(
+                imageURL: overwriteOriginal ? imageData.url : outputURL,
+                cropBox: cropSettings.cropBox,
+                imageSize: imageData.pixelSize,
+                targetRatio: cropSettings.targetRatio,
+                mode: cropSettings.mode,
+                originalRatio: cropSettings.originalRatio
             )
             
-            // Bei MCU-Modus: Verlustfreies Cropping durchführen
-            if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
-                performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
-            } else {
-                // Standard-Cropping: Bild kopieren (Metadaten bereits gespeichert)
-                copyImage(from: imageData.url, to: outputURL)
+            switch result {
+            case .success:
+                metadataSaved = true
+                // Erstelle Crop-Data String für Anzeige
+                let normalized = cropSettings.normalizedCoordinates(for: imageData.pixelSize)
+                cropDataString = String(format: 
+                    "Origin: (%.3f, %.3f)\nSize: (%.3f, %.3f)\nMode: %@\nRatio: %@",
+                    normalized.origin.x, normalized.origin.y,
+                    normalized.size.width, normalized.size.height,
+                    cropSettings.mode.rawValue,
+                    cropSettings.targetRatio.id
+                )
+            case .failure(let error):
+                exportResult = .failure(error.localizedDescription)
+                isExporting = false
+                return
             }
-            
-            exportResult = .success(outputURL, metadataSaved: true, cropData: cropDataString)
-        case .failure(let error):
-            exportResult = .failure(error.localizedDescription)
         }
+        
+        // Bei MCU-Modus: Verlustfreies Cropping durchführen
+        if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
+            performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
+        } else {
+            // Standard-Cropping: Bild kopieren
+            copyImage(from: imageData.url, to: outputURL)
+        }
+        
+        exportResult = .success(outputURL, metadataSaved: metadataSaved, cropData: cropDataString)
         
         isExporting = false
     }
