@@ -116,10 +116,11 @@ struct ControlsView: View {
                                     cropBox.size.height = cropBox.size.width / ratio
                                 }
                             }
-                        ), in: 1...imageSize.width)
+                        ), in: 1...max(1, imageSize.width))
                         Text("\(Int(cropBox.width))")
                             .frame(width: 60)
                     }
+                    .disabled(imageSize.width <= 0)
                     
                     HStack {
                         Text("Höhe:")
@@ -135,10 +136,11 @@ struct ControlsView: View {
                                     cropBox.size.width = cropBox.size.height * ratio
                                 }
                             }
-                        ), in: 1...imageSize.height)
+                        ), in: 1...max(1, imageSize.height))
                         Text("\(Int(cropBox.height))")
                             .frame(width: 60)
                     }
+                    .disabled(imageSize.height <= 0)
                 }
                 
                 Toggle("MCU-Grid anzeigen", isOn: $showMCUGrid)
