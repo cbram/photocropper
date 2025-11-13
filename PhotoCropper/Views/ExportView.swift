@@ -245,23 +245,49 @@ struct ExportView: View {
                 
                 Spacer()
                 
-                // Buttons
-                HStack {
-                    Button("Abbrechen") {
+                // Buttons - IMMER sichtbar
+                HStack(spacing: 12) {
+                    Button(action: {
                         isPresented = false
+                    }) {
+                        HStack {
+                            Image(systemName: "xmark.circle")
+                            Text("Abbrechen")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.2))
+                        .foregroundColor(.primary)
+                        .cornerRadius(8)
                     }
+                    .buttonStyle(.plain)
                     
-                    Spacer()
-                    
-                    Button("Speichern") {
+                    Button(action: {
                         exportImage()
+                    }) {
+                        HStack {
+                            if isExporting {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Image(systemName: "square.and.arrow.down.fill")
+                            }
+                            Text(isExporting ? "Speichere..." : "Speichern")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(filename.isEmpty || isExporting ? Color.blue.opacity(0.5) : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
                     }
+                    .buttonStyle(.plain)
                     .disabled(isExporting || filename.isEmpty)
                 }
             }
         }
         .padding()
-        .frame(width: 500, height: 400)
+        .frame(width: 550, height: 500)
         .onAppear {
             setupDefaultFilename()
             setupDefaultOutputDirectory()
