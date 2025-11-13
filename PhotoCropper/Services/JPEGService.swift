@@ -96,37 +96,57 @@ class JPEGService {
         
         print("✅ jpegtran gefunden in: \(jpegtranPath)")
         
-        // Shell-Wrapper verwenden für bessere Kompatibilität
-        let task = Process()
-        task.launchPath = "/bin/sh"
+        // NEUER ANSATZ: Verwende posix_spawn statt Process()
+        // Das umgeht die "task name port right" Probleme
         
-        // Kompletten Befehl als Shell-Script ausführen
         let command = "\(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all \"\(imageURL.path)\" -outfile \"\(outputURL.path)\""
-        task.arguments = ["-c", command]
         
-        // Umgebungsvariablen setzen (wichtig für subprocess)
-        var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        task.environment = environment
+        print("🔧 Führe aus: sh -c \"\(command)\"")
         
-        print("🔧 Shell Befehl: sh -c \"\(command)\"")
+        // posix_spawn benötigt C-Arrays
+        var pid: pid_t = 0
+        let argv: [UnsafeMutablePointer<CChar>?] = [
+            strdup("/bin/sh"),
+            strdup("-c"),
+            strdup(command),
+            nil
+        ]
         
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        task.standardOutput = outputPipe
-        task.standardError = errorPipe
+        let envp: [UnsafeMutablePointer<CChar>?] = [
+            strdup("PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"),
+            nil
+        ]
         
-        task.launch()
-        task.waitUntilExit()
+        let status = posix_spawn(&pid, "/bin/sh", nil, nil, argv, envp)
         
-        if task.terminationStatus == 0 {
-            print("✅ jpegtran erfolgreich ausgeführt")
-            return .success(())
+        // Cleanup
+        argv.forEach { if let ptr = $0 { free(ptr) } }
+        envp.forEach { if let ptr = $0 { free(ptr) } }
+        
+        if status == 0 {
+            // Warte auf Prozess-Ende
+            var exitStatus: Int32 = 0
+            waitpid(pid, &exitStatus, 0)
+            
+            let actualExit = (exitStatus >> 8) & 0xFF  // Extrahiere echten Exit-Code
+            
+            if actualExit == 0 {
+                print("✅ jpegtran erfolgreich ausgeführt")
+                
+                // Prüfe ob Output-Datei existiert
+                if FileManager.default.fileExists(atPath: outputURL.path) {
+                    return .success(())
+                } else {
+                    print("❌ Output-Datei wurde nicht erstellt")
+                    return .failure(JPEGServiceError.cropFailed("Output-Datei wurde nicht erstellt"))
+                }
+            } else {
+                print("❌ jpegtran fehlgeschlagen mit exit code: \(actualExit)")
+                return .failure(JPEGServiceError.cropFailed("jpegtran exit code: \(actualExit)"))
+            }
         } else {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorString = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            print("❌ jpegtran Fehler (exit \(task.terminationStatus)): \(errorString)")
-            return .failure(JPEGServiceError.cropFailed(errorString))
+            print("❌ posix_spawn fehlgeschlagen mit status: \(status)")
+            return .failure(JPEGServiceError.cropFailed("posix_spawn failed: \(status)"))
         }
     }
     
