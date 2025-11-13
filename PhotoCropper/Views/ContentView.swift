@@ -83,6 +83,16 @@ struct ContentView: View {
                         imageSize: displayImageData.pixelSize,
                         showMCUGrid: showMCUGrid,
                         mcuSize: displayImageData.mcuSize ?? CGSize(width: 8, height: 8),
+                        targetAspectRatio: {
+                            switch targetRatio {
+                            case .ratio16_9:
+                                return 16.0 / 9.0
+                            case .ratio1_1:
+                                return 1.0
+                            case .custom:
+                                return nil
+                            }
+                        }(),
                         onCropBoxChanged: { newBox in
                             updateCropBox(newBox)
                         },

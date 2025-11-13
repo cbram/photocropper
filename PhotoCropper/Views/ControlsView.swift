@@ -119,6 +119,31 @@ struct ControlsView: View {
                     Button("Reset", action: onReset)
                     Button("Maximize", action: onMaximize)
                 }
+                
+                // Eckpunkt-Koordinaten
+                Divider()
+                    .padding(.vertical, 8)
+                
+                Text("ECKPUNKT-KOORDINATEN")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                let x1 = Int(cropBox.origin.x)
+                let y1 = Int(cropBox.origin.y)
+                let x2 = Int(cropBox.origin.x + cropBox.width)
+                let y2 = Int(cropBox.origin.y + cropBox.height)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Oben Links:     (\(x1), \(y2))")
+                        .font(.system(.caption, design: .monospaced))
+                    Text("Oben Rechts:    (\(x2), \(y2))")
+                        .font(.system(.caption, design: .monospaced))
+                    Text("Unten Links:    (\(x1), \(y1))")
+                        .font(.system(.caption, design: .monospaced))
+                    Text("Unten Rechts:   (\(x2), \(y1))")
+                        .font(.system(.caption, design: .monospaced))
+                }
+                .foregroundColor(.secondary)
             }
             
             Spacer()

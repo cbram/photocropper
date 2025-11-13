@@ -18,11 +18,14 @@ class CropCanvasView: NSView {
     
     var onCropBoxChanged: ((CGRect) -> Void)?
     var onRatioChanged: (() -> Void)?  // Callback wenn Ratio manuell geändert wird
+    var targetAspectRatio: CGFloat?  // Optional: gewünschtes Aspect Ratio (width/height)
     
     private var isDragging = false
     private var dragHandle: DragHandle?
     private var dragStartPoint: CGPoint = .zero
     private var dragStartCropBox: CGRect = .zero
+    private var lastDisplayUpdate: Date = Date()
+    private let displayThrottleInterval: TimeInterval = 0.016  // ~60 FPS
     
     enum DragHandle {
         case topLeft, topRight, bottomLeft, bottomRight
@@ -62,7 +65,6 @@ class CropCanvasView: NSView {
             width: cropBox.width * scaleX,
             height: cropBox.height * scaleY
         )
-        print("🖼️ draw(): Rufe drawHandles auf mit cropRect: \(cropRect)")
         drawHandles(in: cropRect, context: context!)
         
         // Info-Text zeichnen
@@ -201,21 +203,13 @@ class CropCanvasView: NSView {
     }
     
     private func drawHandles(in cropRect: CGRect, context: CGContext) {
-        let handleSize: CGFloat = 18  // Noch größer für bessere Sichtbarkeit
+        let handleSize: CGFloat = 24  // Noch größer für besseres Greifen
         let handleColor = NSColor.white
         let handleBorderColor = NSColor.red
         
-        print("🎯 === DRAW HANDLES DEBUG ===")
-        print("   View Bounds: \(bounds)")
-        print("   Crop Rect:   \(cropRect)")
-        
         // Sicherstellen dass Crop-Rect innerhalb der View-Bounds ist
         let visibleRect = bounds.intersection(cropRect)
-        print("   Visible Intersection: \(visibleRect)")
-        guard !visibleRect.isEmpty else {
-            print("   ⚠️ ABBRUCH: Crop-Rect nicht innerhalb Bounds!")
-            return
-        }
+        guard !visibleRect.isEmpty else { return }
         
         // Eckpunkte (auf VISIBLE RECT, nicht auf vollständiger Crop-Rect!)
         // Dies stellt sicher, dass Handles immer innerhalb der View sind
@@ -225,7 +219,6 @@ class CropCanvasView: NSView {
             CGPoint(x: visibleRect.minX, y: visibleRect.maxY),  // Oben links
             CGPoint(x: visibleRect.maxX, y: visibleRect.maxY)   // Oben rechts
         ]
-        print("   Ecken (auf visibleRect): \(corners)")
         
         // Kantenpunkte (Mitte, auf VISIBLE RECT)
         let edges = [
@@ -236,8 +229,7 @@ class CropCanvasView: NSView {
         ]
         
         // Zeichne Ecken-Handles (größer)
-        var cornersDrawn = 0
-        for (index, point) in corners.enumerated() {
+        for point in corners {
             let handleRect = CGRect(
                 x: point.x - handleSize / 2,
                 y: point.y - handleSize / 2,
@@ -245,11 +237,8 @@ class CropCanvasView: NSView {
                 height: handleSize
             )
             
-            let intersects = bounds.intersects(handleRect)
-            print("   Ecke \(index): \(point) → Rect: \(handleRect), intersects: \(intersects)")
-            
             // Nur zeichnen wenn innerhalb der View-Bounds
-            if intersects {
+            if bounds.intersects(handleRect) {
                 // Weißer Hintergrund
                 context.setFillColor(handleColor.cgColor)
                 context.fill(handleRect)
@@ -258,16 +247,13 @@ class CropCanvasView: NSView {
                 context.setStrokeColor(handleBorderColor.cgColor)
                 context.setLineWidth(2.0)
                 context.stroke(handleRect)
-                cornersDrawn += 1
             }
         }
-        print("   ✅ Ecken gezeichnet: \(cornersDrawn)/4")
         
         // Zeichne Kanten-Handles (rechteckig, gut sichtbar)
-        let edgeHandleWidth: CGFloat = 30  // Breiter
-        let edgeHandleHeight: CGFloat = 10  // Höher
+        let edgeHandleWidth: CGFloat = 40  // Noch breiter für besseres Greifen
+        let edgeHandleHeight: CGFloat = 14  // Noch höher
         
-        var edgesDrawn = 0
         for (index, point) in edges.enumerated() {
             var handleRect: CGRect
             
@@ -289,12 +275,8 @@ class CropCanvasView: NSView {
                 )
             }
             
-            let intersects = bounds.intersects(handleRect)
-            let edgeName = ["Unten", "Oben", "Links", "Rechts"][index]
-            print("   Kante \(edgeName): \(point) → Rect: \(handleRect), intersects: \(intersects)")
-            
             // Nur zeichnen wenn innerhalb der View-Bounds
-            if intersects {
+            if bounds.intersects(handleRect) {
                 // Weißer Hintergrund
                 context.setFillColor(handleColor.cgColor)
                 context.fill(handleRect)
@@ -303,11 +285,8 @@ class CropCanvasView: NSView {
                 context.setStrokeColor(handleBorderColor.cgColor)
                 context.setLineWidth(2.0)
                 context.stroke(handleRect)
-                edgesDrawn += 1
             }
         }
-        print("   ✅ Kanten gezeichnet: \(edgesDrawn)/4")
-        print("🎯 === DRAW HANDLES ENDE ===\n")
     }
     
     private func drawInfoText(in imageRect: CGRect, context: CGContext) {
@@ -353,42 +332,90 @@ class CropCanvasView: NSView {
             newCropBox.origin.y -= delta.y * scaleY
             
         case .topLeft:
-            newCropBox.origin.x += delta.x * scaleX
-            newCropBox.origin.y -= delta.y * scaleY
-            newCropBox.size.width -= delta.x * scaleX
-            newCropBox.size.height += delta.y * scaleY
+            if let aspectRatio = targetAspectRatio {
+                // Mit Aspect Ratio: Breite führt
+                newCropBox.origin.x += delta.x * scaleX
+                newCropBox.size.width -= delta.x * scaleX
+                newCropBox.size.height = newCropBox.size.width / aspectRatio
+                newCropBox.origin.y = dragStartCropBox.maxY - newCropBox.size.height
+            } else {
+                // Ohne Aspect Ratio: Freie Anpassung
+                newCropBox.origin.x += delta.x * scaleX
+                newCropBox.origin.y -= delta.y * scaleY
+                newCropBox.size.width -= delta.x * scaleX
+                newCropBox.size.height += delta.y * scaleY
+            }
             
         case .topRight:
-            newCropBox.origin.y -= delta.y * scaleY
-            newCropBox.size.width += delta.x * scaleX
-            newCropBox.size.height += delta.y * scaleY
+            if let aspectRatio = targetAspectRatio {
+                // Mit Aspect Ratio: Breite führt
+                newCropBox.size.width += delta.x * scaleX
+                newCropBox.size.height = newCropBox.size.width / aspectRatio
+                newCropBox.origin.y = dragStartCropBox.maxY - newCropBox.size.height
+            } else {
+                // Ohne Aspect Ratio: Freie Anpassung
+                newCropBox.origin.y -= delta.y * scaleY
+                newCropBox.size.width += delta.x * scaleX
+                newCropBox.size.height += delta.y * scaleY
+            }
             
         case .bottomLeft:
-            newCropBox.origin.x += delta.x * scaleX
-            newCropBox.size.width -= delta.x * scaleX
-            newCropBox.size.height -= delta.y * scaleY
+            if let aspectRatio = targetAspectRatio {
+                // Mit Aspect Ratio: Breite führt
+                newCropBox.origin.x += delta.x * scaleX
+                newCropBox.size.width -= delta.x * scaleX
+                newCropBox.size.height = newCropBox.size.width / aspectRatio
+            } else {
+                // Ohne Aspect Ratio: Freie Anpassung
+                newCropBox.origin.x += delta.x * scaleX
+                newCropBox.size.width -= delta.x * scaleX
+                newCropBox.size.height -= delta.y * scaleY
+            }
             
         case .bottomRight:
-            newCropBox.size.width += delta.x * scaleX
-            newCropBox.size.height -= delta.y * scaleY
+            if let aspectRatio = targetAspectRatio {
+                // Mit Aspect Ratio: Breite führt
+                newCropBox.size.width += delta.x * scaleX
+                newCropBox.size.height = newCropBox.size.width / aspectRatio
+            } else {
+                // Ohne Aspect Ratio: Freie Anpassung
+                newCropBox.size.width += delta.x * scaleX
+                newCropBox.size.height -= delta.y * scaleY
+            }
             
         case .top:
             // Obere Kante verschieben
             newCropBox.origin.y -= delta.y * scaleY
             newCropBox.size.height += delta.y * scaleY
+            // Aspect Ratio beibehalten wenn gesetzt
+            if let aspectRatio = targetAspectRatio {
+                newCropBox.size.width = newCropBox.size.height * aspectRatio
+            }
             
         case .bottom:
             // Untere Kante verschieben
             newCropBox.size.height -= delta.y * scaleY
+            // Aspect Ratio beibehalten wenn gesetzt
+            if let aspectRatio = targetAspectRatio {
+                newCropBox.size.width = newCropBox.size.height * aspectRatio
+            }
             
         case .left:
             // Linke Kante verschieben
             newCropBox.origin.x += delta.x * scaleX
             newCropBox.size.width -= delta.x * scaleX
+            // Aspect Ratio beibehalten wenn gesetzt
+            if let aspectRatio = targetAspectRatio {
+                newCropBox.size.height = newCropBox.size.width / aspectRatio
+            }
             
         case .right:
             // Rechte Kante verschieben
             newCropBox.size.width += delta.x * scaleX
+            // Aspect Ratio beibehalten wenn gesetzt
+            if let aspectRatio = targetAspectRatio {
+                newCropBox.size.height = newCropBox.size.width / aspectRatio
+            }
         }
         
         // Validieren und begrenzen
@@ -401,12 +428,20 @@ class CropCanvasView: NSView {
         
         cropBox = newCropBox
         onCropBoxChanged?(cropBox)
-        needsDisplay = true
+        
+        // Throttle Display-Updates für flüssigeres Dragging
+        let now = Date()
+        if now.timeIntervalSince(lastDisplayUpdate) >= displayThrottleInterval {
+            needsDisplay = true
+            lastDisplayUpdate = now
+        }
     }
     
     override func mouseUp(with event: NSEvent) {
         isDragging = false
         dragHandle = nil
+        // Final display update nach Drag-Ende
+        needsDisplay = true
     }
     
     private func handleAtPoint(_ point: CGPoint) -> DragHandle? {
@@ -425,8 +460,8 @@ class CropCanvasView: NSView {
         let visibleRect = bounds.intersection(cropRect)
         guard !visibleRect.isEmpty else { return nil }
         
-        let handleSize: CGFloat = 18  // Größer für bessere Erkennung
-        let edgeSize: CGFloat = 20  // Größerer Bereich für Kanten
+        let handleSize: CGFloat = 24  // Größer für bessere Erkennung
+        let edgeSize: CGFloat = 30  // Größerer Bereich für Kanten
         
         // Ecken prüfen (Priorität vor Kanten) - auf VISIBLE RECT
         let corners = [
@@ -500,6 +535,7 @@ struct CanvasView: NSViewRepresentable {
     var imageSize: CGSize
     var showMCUGrid: Bool
     var mcuSize: CGSize
+    var targetAspectRatio: CGFloat?  // Für Aspect-Ratio-Lock beim Dragging
     var onCropBoxChanged: ((CGRect) -> Void)?
     var onRatioChanged: (() -> Void)?
     
@@ -516,6 +552,7 @@ struct CanvasView: NSViewRepresentable {
         nsView.imageSize = imageSize
         nsView.showMCUGrid = showMCUGrid
         nsView.mcuSize = mcuSize
+        nsView.targetAspectRatio = targetAspectRatio
         nsView.onCropBoxChanged = onCropBoxChanged
         nsView.onRatioChanged = onRatioChanged
         nsView.needsDisplay = true
