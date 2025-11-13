@@ -31,7 +31,7 @@ class ExifDateParser {
         }
         
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd_HHmmss"
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let dateString = formatter.string(from: date)
         
         let extensionString = imageData.url.pathExtension.lowercased()

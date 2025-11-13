@@ -124,107 +124,91 @@ struct ExportView: View {
                     }
                 }
                 
-                // Ergebnis-Anzeige
+                // Ergebnis-Anzeige (kompakt)
                 if let result = exportResult {
-                    VStack(spacing: 12) {
-                        switch result {
-                        case .success(let url, let metadataSaved, let cropData):
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
-                                        .font(.title2)
-                                    Text("Erfolgreich gespeichert!")
-                                        .foregroundColor(.green)
-                                        .fontWeight(.bold)
-                                        .font(.title3)
-                                }
-                                
-                                Text(url.lastPathComponent)
-                                    .font(.callout)
+                    switch result {
+                    case .success(let url, let metadataSaved, let cropData):
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .font(.title3)
+                                Text("Erfolgreich gespeichert!")
+                                    .foregroundColor(.green)
                                     .fontWeight(.semibold)
-                                
-                                Text(url.deletingLastPathComponent().path)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                
-                                Divider()
-                                
-                                // EXIF-Metadaten Bestätigung
-                                if metadataSaved {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        HStack {
-                                            Image(systemName: "doc.text.fill")
-                                                .foregroundColor(.blue)
-                                            Text("EXIF Crop-Metadaten gespeichert:")
-                                                .font(.caption)
-                                                .fontWeight(.semibold)
-                                        }
-                                        
-                                        HStack(spacing: 12) {
-                                            Label("DefaultCropOrigin", systemImage: "mappin.circle.fill")
-                                            Label("DefaultCropSize", systemImage: "square.resize")
-                                            Label("XMP Tags", systemImage: "tag.fill")
-                                        }
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                        
-                                        // Zeige ob Bild gecroppt wurde oder nicht
-                                        if cropData.contains("NUR METADATEN") {
-                                            HStack {
-                                                Image(systemName: "info.circle.fill")
-                                                    .foregroundColor(.purple)
-                                                Text("Bild wurde NICHT gecroppt (nur Metadaten)")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.purple)
-                                                    .fontWeight(.semibold)
-                                            }
-                                            .padding(.top, 4)
-                                        }
-                                        
-                                        Text(cropData)
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                            .padding(6)
-                                            .background(Color.gray.opacity(0.1))
-                                            .cornerRadius(6)
-                                    }
-                                    .padding(.vertical, 4)
-                                } else {
-                                    HStack {
-                                        Image(systemName: "info.circle.fill")
-                                            .foregroundColor(.gray)
-                                        Text("EXIF Crop-Metadaten wurden nicht gespeichert (Checkbox war deaktiviert)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
                             }
-                            .padding(12)
-                            .background(Color.green.opacity(0.1))
-                            .cornerRadius(8)
                             
-                        case .failure(let error):
-                            VStack(spacing: 8) {
-                                HStack {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.red)
-                                        .font(.title2)
-                                    Text("Fehler beim Speichern")
-                                        .foregroundColor(.red)
-                                        .fontWeight(.bold)
+                            Text(url.lastPathComponent)
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                            
+                            Text(url.deletingLastPathComponent().path)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            
+                            // EXIF-Metadaten Bestätigung (kompakt)
+                            if metadataSaved {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "doc.text.fill")
+                                        .foregroundColor(.blue)
+                                        .font(.caption2)
+                                    Text("EXIF Crop-Metadaten gespeichert:")
+                                        .font(.caption2)
+                                        .foregroundColor(.blue)
+                                    
+                                    // Zeige ob nur Metadaten oder auch gecroppt
+                                    if cropData.contains("NUR METADATEN") {
+                                        Image(systemName: "tag.fill")
+                                            .foregroundColor(.purple)
+                                            .font(.caption2)
+                                    } else {
+                                        Image(systemName: "crop")
+                                            .foregroundColor(.green)
+                                            .font(.caption2)
+                                    }
                                 }
                                 
-                                Text(error)
-                                    .font(.caption)
+                                Text(cropData)
+                                    .font(.caption2)
                                     .foregroundColor(.secondary)
+                                    .padding(4)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(4)
                             }
-                            .padding(12)
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(8)
                         }
+                        .padding(10)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(8)
                         
-                        // OK Button zum Schließen
+                    case .failure(let error):
+                        VStack(spacing: 6) {
+                            HStack {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
+                                    .font(.title3)
+                                Text("Fehler beim Speichern")
+                                    .foregroundColor(.red)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(10)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                }
+                
+                Spacer()
+                
+                // Buttons - Variieren je nach Status
+                HStack(spacing: 12) {
+                    if exportResult != nil {
+                        // Nach Export: Nur OK Button zum Schließen
                         Button(action: {
                             exportResult = nil
                             isPresented = false
@@ -240,49 +224,45 @@ struct ExportView: View {
                             .cornerRadius(8)
                         }
                         .buttonStyle(.plain)
-                    }
-                }
-                
-                Spacer()
-                
-                // Buttons - IMMER sichtbar
-                HStack(spacing: 12) {
-                    Button(action: {
-                        isPresented = false
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle")
-                            Text("Abbrechen")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.gray.opacity(0.2))
-                        .foregroundColor(.primary)
-                        .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button(action: {
-                        exportImage()
-                    }) {
-                        HStack {
-                            if isExporting {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            } else {
-                                Image(systemName: "square.and.arrow.down.fill")
+                    } else {
+                        // Vor Export: Abbrechen + Speichern
+                        Button(action: {
+                            isPresented = false
+                        }) {
+                            HStack {
+                                Image(systemName: "xmark.circle")
+                                Text("Abbrechen")
                             }
-                            Text(isExporting ? "Speichere..." : "Speichern")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.gray.opacity(0.2))
+                            .foregroundColor(.primary)
+                            .cornerRadius(8)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(filename.isEmpty || isExporting ? Color.blue.opacity(0.5) : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+                        .buttonStyle(.plain)
+                        
+                        Button(action: {
+                            exportImage()
+                        }) {
+                            HStack {
+                                if isExporting {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                } else {
+                                    Image(systemName: "square.and.arrow.down.fill")
+                                }
+                                Text(isExporting ? "Speichere..." : "Speichern")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(filename.isEmpty || isExporting ? Color.blue.opacity(0.5) : Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isExporting || filename.isEmpty)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isExporting || filename.isEmpty)
                 }
             }
         }
