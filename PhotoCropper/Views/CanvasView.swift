@@ -17,6 +17,7 @@ class CropCanvasView: NSView {
     var mcuSize: CGSize = CGSize(width: 8, height: 8)
     
     var onCropBoxChanged: ((CGRect) -> Void)?
+    var onRatioChanged: (() -> Void)?  // Callback wenn Ratio manuell geändert wird
     
     private var isDragging = false
     private var dragHandle: DragHandle?
@@ -249,14 +250,33 @@ class CropCanvasView: NSView {
             newCropBox.size.width += delta.x * scaleX
             newCropBox.size.height -= delta.y * scaleY
             
-        case .top, .bottom, .left, .right:
-            // Einfache Implementierung: Seiten verschieben
-            // In vollständiger Version: Ratio-Lock für Ecken
-            break
+        case .top:
+            // Obere Kante verschieben
+            newCropBox.origin.y -= delta.y * scaleY
+            newCropBox.size.height += delta.y * scaleY
+            
+        case .bottom:
+            // Untere Kante verschieben
+            newCropBox.size.height -= delta.y * scaleY
+            
+        case .left:
+            // Linke Kante verschieben
+            newCropBox.origin.x += delta.x * scaleX
+            newCropBox.size.width -= delta.x * scaleX
+            
+        case .right:
+            // Rechte Kante verschieben
+            newCropBox.size.width += delta.x * scaleX
         }
         
         // Validieren und begrenzen
         newCropBox = CropEngine.validateCropBox(newCropBox, imageSize: imageSize)
+        
+        // Bei Kanten/Ecken-Drag: Signal für Custom-Ratio senden
+        if handle != .center {
+            onRatioChanged?()
+        }
+        
         cropBox = newCropBox
         onCropBoxChanged?(cropBox)
         needsDisplay = true
@@ -280,8 +300,9 @@ class CropCanvasView: NSView {
         )
         
         let handleSize: CGFloat = 10
+        let edgeSize: CGFloat = 15  // Größerer Bereich für Kanten
         
-        // Ecken prüfen
+        // Ecken prüfen (Priorität vor Kanten)
         if point.distance(to: cropRect.origin) < handleSize {
             return .bottomLeft
         }
@@ -293,6 +314,28 @@ class CropCanvasView: NSView {
         }
         if point.distance(to: CGPoint(x: cropRect.maxX, y: cropRect.maxY)) < handleSize {
             return .topRight
+        }
+        
+        // Kanten prüfen (mit größerem Bereich)
+        // Obere Kante
+        if abs(point.y - cropRect.maxY) < edgeSize && 
+           point.x >= cropRect.minX && point.x <= cropRect.maxX {
+            return .top
+        }
+        // Untere Kante
+        if abs(point.y - cropRect.minY) < edgeSize && 
+           point.x >= cropRect.minX && point.x <= cropRect.maxX {
+            return .bottom
+        }
+        // Linke Kante
+        if abs(point.x - cropRect.minX) < edgeSize && 
+           point.y >= cropRect.minY && point.y <= cropRect.maxY {
+            return .left
+        }
+        // Rechte Kante
+        if abs(point.x - cropRect.maxX) < edgeSize && 
+           point.y >= cropRect.minY && point.y <= cropRect.maxY {
+            return .right
         }
         
         // Mitte prüfen
@@ -325,10 +368,12 @@ struct CanvasView: NSViewRepresentable {
     var showMCUGrid: Bool
     var mcuSize: CGSize
     var onCropBoxChanged: ((CGRect) -> Void)?
+    var onRatioChanged: (() -> Void)?
     
     func makeNSView(context: Context) -> CropCanvasView {
         let view = CropCanvasView()
         view.onCropBoxChanged = onCropBoxChanged
+        view.onRatioChanged = onRatioChanged
         return view
     }
     
@@ -338,6 +383,8 @@ struct CanvasView: NSViewRepresentable {
         nsView.imageSize = imageSize
         nsView.showMCUGrid = showMCUGrid
         nsView.mcuSize = mcuSize
+        nsView.onCropBoxChanged = onCropBoxChanged
+        nsView.onRatioChanged = onRatioChanged
         nsView.needsDisplay = true
     }
 }

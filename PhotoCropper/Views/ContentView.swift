@@ -69,6 +69,10 @@ struct ContentView: View {
                         mcuSize: imageData.mcuSize ?? CGSize(width: 8, height: 8),
                         onCropBoxChanged: { newBox in
                             updateCropBox(newBox)
+                        },
+                        onRatioChanged: {
+                            // Automatisch zu Custom-Ratio wechseln
+                            switchToCustomRatio()
                         }
                     )
                     .background(Color.black)
@@ -263,6 +267,14 @@ struct ContentView: View {
             originalRatio: imageData.aspectRatioString,
             mcuSize: imageData.mcuSize
         )
+    }
+    
+    private func switchToCustomRatio() {
+        // Berechne Custom-Ratio aus aktueller Crop-Box
+        let ratio = calculateImageAspectRatio(size: cropBox.size)
+        customWidth = String(ratio.width)
+        customHeight = String(ratio.height)
+        targetRatio = .custom(width: ratio.width, height: ratio.height)
     }
 }
 
