@@ -90,20 +90,28 @@ class MetadataService {
             strdup(exiftoolPath),
             strdup("-overwrite_original"),  // Kein _original Backup
             strdup("-n"),  // Numeric mode (keine Formatierung)
-            // EXIF Tags
-            strdup("-EXIF:DefaultCropOriginX=\(normalizedOrigin.x)"),
-            strdup("-EXIF:DefaultCropOriginY=\(normalizedOrigin.y)"),
-            strdup("-EXIF:DefaultCropSizeWidth=\(normalizedSize.width)"),
-            strdup("-EXIF:DefaultCropSizeHeight=\(normalizedSize.height)"),
-            // XMP Tags (Adobe-kompatibel)
-            strdup("-XMP:CropTop=\(normalizedOrigin.y)"),
-            strdup("-XMP:CropLeft=\(normalizedOrigin.x)"),
-            strdup("-XMP:CropBottom=\(cropBottom)"),
-            strdup("-XMP:CropRight=\(cropRight)"),
-            // Custom Tags
+            
+            // XMP Tags (Adobe Camera Raw / Lightroom kompatibel)
+            // Diese Tags sind der Standard für Crop-Informationen!
+            strdup("-XMP-crs:CropTop=\(normalizedOrigin.y)"),
+            strdup("-XMP-crs:CropLeft=\(normalizedOrigin.x)"),
+            strdup("-XMP-crs:CropBottom=\(cropBottom)"),
+            strdup("-XMP-crs:CropRight=\(cropRight)"),
+            
+            // XMP Dublin Core für unsere Custom-Daten
+            strdup("-XMP-dc:Subject+=PhotoCropper:CropMode=\(mode.rawValue)"),
+            strdup("-XMP-dc:Subject+=PhotoCropper:TargetRatio=\(targetRatio.id)"),
+            strdup("-XMP-dc:Subject+=PhotoCropper:OriginalRatio=\(originalRatio)"),
+            strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginX=\(normalizedOrigin.x)"),
+            strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginY=\(normalizedOrigin.y)"),
+            strdup("-XMP-dc:Subject+=PhotoCropper:CropWidth=\(normalizedSize.width)"),
+            strdup("-XMP-dc:Subject+=PhotoCropper:CropHeight=\(normalizedSize.height)"),
+            
+            // IPTC Keywords als Fallback (sichtbar in Finder/Photos)
             strdup("-IPTC:Keywords+=CropMode:\(mode.rawValue)"),
             strdup("-IPTC:Keywords+=TargetRatio:\(targetRatio.id)"),
             strdup("-IPTC:Keywords+=OriginalRatio:\(originalRatio)"),
+            
             strdup(imageURL.path),
             nil
         ]
