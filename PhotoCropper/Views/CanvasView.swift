@@ -88,23 +88,23 @@ class CropCanvasView: NSView {
         var imageRect: CGRect
         
         if imageAspect > viewAspect {
-            // Bild ist breiter → Höhe bestimmt Größe
-            let height = bounds.height
-            let width = height * imageAspect
-            imageRect = CGRect(
-                x: (bounds.width - width) / 2,
-                y: 0,
-                width: width,
-                height: height
-            )
-            print("   → Bild ist breiter, imageRect: \(imageRect)")
-        } else {
-            // Bild ist höher → Breite bestimmt Größe
+            // Bild ist breiter → Breite bestimmt Größe (fill width)
             let width = bounds.width
             let height = width / imageAspect
             imageRect = CGRect(
                 x: 0,
                 y: (bounds.height - height) / 2,
+                width: width,
+                height: height
+            )
+            print("   → Bild ist breiter, imageRect: \(imageRect)")
+        } else {
+            // Bild ist höher → Höhe bestimmt Größe (fill height)
+            let height = bounds.height
+            let width = height * imageAspect
+            imageRect = CGRect(
+                x: (bounds.width - width) / 2,
+                y: 0,
                 width: width,
                 height: height
             )
