@@ -20,7 +20,7 @@ struct PreviewView: View {
                 .font(.headline)
                 .foregroundColor(.secondary)
             
-            if let image = image {
+            if let image = image, let croppedImage = cropImage(image, cropBox: cropBox, imageSize: imageSize) {
                 GeometryReader { geometry in
                     let previewSize = calculatePreviewSize(in: geometry.size)
                     let currentRatio = cropBox.width / cropBox.height
@@ -28,26 +28,17 @@ struct PreviewView: View {
                     let deviation = abs(currentRatio - targetRatioValue)
                     
                     ZStack {
-                        // Bild-Preview
-                        Image(nsImage: image)
+                        // Gecropptes Bild-Preview
+                        Image(nsImage: croppedImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: previewSize.width, height: previewSize.height)
                             .clipped()
                         
-                        // Zielformat-Overlay (gestrichelt)
+                        // Rahmen um das Preview
                         Rectangle()
-                            .stroke(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
-                            .foregroundColor(Color.green.opacity(0.8))
+                            .stroke(currentRatio == targetRatioValue ? Color.green : Color.orange, lineWidth: 2)
                             .frame(width: previewSize.width, height: previewSize.height)
-                        
-                        // Aktuelles Format (rot, durchgezogen)
-                        Rectangle()
-                            .stroke(Color.red, lineWidth: 2)
-                            .frame(
-                                width: previewSize.width,
-                                height: previewSize.width / CGFloat(currentRatio)
-                            )
                         
                         // Abweichungs-Indikator
                         if deviation > 0.01 {
@@ -109,20 +100,47 @@ struct PreviewView: View {
     }
     
     private func calculatePreviewSize(in availableSize: CGSize) -> CGSize {
-        let targetAspect = targetRatio.value
+        let cropAspect = cropBox.width / cropBox.height
         let availableAspect = availableSize.width / availableSize.height
         
-        if targetAspect > availableAspect {
-            // Ziel ist breiter → Breite bestimmt Größe
+        if cropAspect > availableAspect {
+            // Crop ist breiter → Breite bestimmt Größe
             let width = availableSize.width
-            let height = width / CGFloat(targetAspect)
+            let height = width / cropAspect
             return CGSize(width: width, height: height)
         } else {
-            // Ziel ist höher → Höhe bestimmt Größe
+            // Crop ist höher → Höhe bestimmt Größe
             let height = availableSize.height
-            let width = height * CGFloat(targetAspect)
+            let width = height * cropAspect
             return CGSize(width: width, height: height)
         }
+    }
+    
+    private func cropImage(_ image: NSImage, cropBox: CGRect, imageSize: CGSize) -> NSImage? {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        
+        // Berechne Scale-Faktor (falls Bild skaliert wurde)
+        let scaleX = CGFloat(cgImage.width) / imageSize.width
+        let scaleY = CGFloat(cgImage.height) / imageSize.height
+        
+        // Crop-Rect in CGImage-Koordinaten umrechnen
+        let scaledCropRect = CGRect(
+            x: cropBox.origin.x * scaleX,
+            y: cropBox.origin.y * scaleY,
+            width: cropBox.width * scaleX,
+            height: cropBox.height * scaleY
+        )
+        
+        // Crop durchführen
+        guard let croppedCGImage = cgImage.cropping(to: scaledCropRect) else {
+            return nil
+        }
+        
+        // Zurück zu NSImage konvertieren
+        let croppedImage = NSImage(cgImage: croppedCGImage, size: NSSize(width: cropBox.width, height: cropBox.height))
+        return croppedImage
     }
 }
 
