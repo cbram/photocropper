@@ -81,20 +81,33 @@ class JPEGService {
         let w = Int(cropRect.width)
         let h = Int(cropRect.height)
         
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/local/bin/jpegtran")
+        // jpegtran-Pfad finden (verschiedene Installationsorte)
+        let possiblePaths = [
+            "/opt/homebrew/bin/jpegtran",  // Homebrew auf Apple Silicon
+            "/usr/local/bin/jpegtran",      // Homebrew auf Intel
+            "/usr/bin/jpegtran",            // System-Installation
+            "/opt/local/bin/jpegtran"       // MacPorts
+        ]
         
-        // Fallback zu /opt/homebrew/bin/jpegtran (Apple Silicon)
-        if !FileManager.default.fileExists(atPath: task.executableURL!.path) {
-            task.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/jpegtran")
+        guard let jpegtranPath = possiblePaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            print("❌ jpegtran nicht gefunden in:", possiblePaths)
+            return .failure(JPEGServiceError.jpegtranNotAvailable)
         }
+        
+        print("✅ jpegtran gefunden in: \(jpegtranPath)")
+        
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: jpegtranPath)
         
         // jpegtran -crop WxH+X+Y input.jpg output.jpg
         task.arguments = [
             "-crop", "\(w)x\(h)+\(x)+\(y)",
+            "-copy", "all",  // Alle Metadaten kopieren
             imageURL.path,
-            outputURL.path
+            "-outfile", outputURL.path
         ]
+        
+        print("🔧 jpegtran Befehl: \(jpegtranPath) -crop \(w)x\(h)+\(x)+\(y) -copy all \(imageURL.path) -outfile \(outputURL.path)")
         
         let errorPipe = Pipe()
         task.standardError = errorPipe
