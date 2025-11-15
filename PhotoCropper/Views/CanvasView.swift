@@ -272,193 +272,115 @@ class CropCanvasView: NSView {
     }
     
     private func drawFibonacciSpiral(in rect: CGRect, context: CGContext, orientation: FibonacciOrientation) {
-        context.saveGState()
+        let fibValues: [CGFloat] = [1, 1, 2, 3, 5, 8, 13, 21]
+        let canonicalSize = CGSize(
+            width: fibValues[fibValues.count - 1] + fibValues[fibValues.count - 2], // 34 Fibonacci-Einheiten
+            height: fibValues[fibValues.count - 1] // 21 Fibonacci-Einheiten
+        )
         
-        // Nur TopLeft implementieren (die anderen später)
-        if orientation != .topLeft {
-            context.restoreGState()
+        let nucleusPercentX: CGFloat = 0.243
+        let nucleusPercentY: CGFloat = 0.286
+        let canonicalNucleus = CGPoint(
+            x: canonicalSize.width * nucleusPercentX,
+            y: canonicalSize.height * nucleusPercentY
+        )
+        
+        print("🔴 === FIBONACCI SPIRAL DEBUG ===")
+        print("🔴 Crop-Rect: \(rect)")
+        print("🔴 Orientierung: \(orientation)")
+        print("🌀 Canonical Size: \(canonicalSize)")
+        print("🎯 Canonical Nucleus: \(canonicalNucleus)")
+        
+        let spiralPath = buildFibonacciSpiralPath(
+            fibValues: fibValues,
+            nucleus: canonicalNucleus,
+            clockwise: true
+        )
+        
+        let canonicalBounds = spiralPath.boundingBoxOfPath
+        
+        var transform = fibonacciTransform(
+            for: rect,
+            canonicalSize: canonicalSize,
+            canonicalBounds: canonicalBounds,
+            orientation: orientation
+        )
+        
+        guard let transformedPath = spiralPath.copy(using: &transform) else {
+            print("⚠️ Konnte Fibonacci-Pfad nicht transformieren.")
             return
         }
         
-        print("🔴 === FIBONACCI SPIRAL DEBUG ===")
-        print("🔴 Input rect (Crop-Box): (\(rect.minX), \(rect.minY)) bis (\(rect.maxX), \(rect.maxY))")
-        print("🔴 Input rect Größe: \(rect.width) x \(rect.height)")
+        let bounding = transformedPath.boundingBoxOfPath
+        print("📦 Spiral BoundingBox: \(bounding)")
         
-        let n = 10 // Anzahl der Fibonacci-Quadrate
-        
-        // 1) Berechne Fibonacci-Folge
-        var fib: [CGFloat] = []
-        for i in 0..<n {
-            fib.append(fibonacci(i))
-        }
-        
-        print("🌀 Fibonacci-Folge: \(fib)")
-        
-        // 2) Quadrat-Tiling berechnen (lokale Koordinaten)
-        // Basierend auf dem Python-Code
-        var squares: [(x: CGFloat, y: CGFloat, size: CGFloat)] = []
-        
-        // Starte mit größtem Quadrat bei (0,0)
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        squares.append((x: 0, y: 0, size: fib[n-1]))
-        
-        var minX: CGFloat = 0
-        var maxX: CGFloat = fib[n-1]
-        var minY: CGFloat = 0
-        var maxY: CGFloat = fib[n-1]
-        
-        // Richtungen: right (1,0), up (0,-1), left (-1,0), down (0,1)
-        let dirs = [(1, 0), (0, -1), (-1, 0), (0, 1)]
-        
-        // Füge Quadrate iterativ hinzu (von groß nach klein)
-        for i in stride(from: n-2, through: 0, by: -1) {
-            let size = fib[i]
-            let dirIndex = (n - 1 - i) % 4
-            let (dx, dy) = dirs[dirIndex]
-            
-            // Berechne neue Position (wie im Python-Code)
-            if dx == 1 {  // right
-                x = maxX
-                y = maxY - size
-            } else if dx == -1 {  // left
-                x = minX - size
-                y = minY
-            } else if dy == -1 {  // up
-                x = minX
-                y = minY - size
-            } else {  // down (dy == 1)
-                x = maxX - size
-                y = maxY
-            }
-            
-            squares.append((x: x, y: y, size: size))
-            
-            // Update bounds
-            minX = min(minX, x)
-            minY = min(minY, y)
-            maxX = max(maxX, x + size)
-            maxY = max(maxY, y + size)
-            
-            print("   Quadrat \(n-1-i): Pos(\(x), \(y)), Größe=\(size), dir=\(dirIndex)")
-        }
-        
-        print("📦 Tiling bounds: x[\(minX)..\(maxX)], y[\(minY)..\(maxY)]")
-        
-        // 3) Bestimme innere Ecke (Spiralzentrum) - wie im Python-Code
-        let smallSquare = squares.last!
-        let x_small = smallSquare.x
-        let y_small = smallSquare.y
-        let s_small = smallSquare.size
-        let r = n % 4
-        
-        var spiralCenterX: CGFloat
-        var spiralCenterY: CGFloat
-        
-        switch r {
-        case 0:
-            spiralCenterX = x_small + s_small
-            spiralCenterY = y_small + s_small
-        case 1:
-            spiralCenterX = x_small
-            spiralCenterY = y_small + s_small
-        case 2:
-            spiralCenterX = x_small
-            spiralCenterY = y_small
-        default: // case 3
-            spiralCenterX = x_small + s_small
-            spiralCenterY = y_small
-        }
-        
-        print("🎯 Lokales Spiralzentrum: (\(spiralCenterX), \(spiralCenterY)) [r=\(r)]")
-        
-        // 4) Place on paper (wie im Python-Code)
-        let W = rect.width
-        let H = rect.height
-        let width = maxX - minX
-        let height = maxY - minY
-        
-        print("📏 Tiling-Größe: \(width) x \(height)")
-        print("📦 Crop-Box (Paper): \(W) x \(H)")
-        
-        // Skalierung: nutze kleinere Dimension
-        let s = min(W / width, H / height)
-        
-        print("📐 Skalierung: \(s)")
-        
-        // Zentriere das GESAMTE Tiling in der Crop-Box
-        let offX = rect.minX + (W - width * s) / 2 - minX * s
-        let offY = rect.minY + (H - height * s) / 2 - minY * s
-        
-        print("🎯 Offsets: X=\(offX), Y=\(offY))")
-        
-        // 5) Berechne Spiralzentrum auf dem "Papier" (Crop-Box)
-        let startX = offX + spiralCenterX * s
-        let startY = offY + spiralCenterY * s
-        
-        print("✨ Spiralzentrum auf Blatt: (\(startX), \(startY))")
-        print("🔴 Crop-Box (rect): (\(rect.minX), \(rect.minY)) bis (\(rect.maxX), \(rect.maxY))")
-        print("🔴 Crop-Box Größe: \(rect.width) x \(rect.height)")
-        
-        // Validierung
-        if startX < rect.minX || startX > rect.maxX || startY < rect.minY || startY > rect.maxY {
-            print("⚠️ WARNUNG: Spiralzentrum liegt außerhalb der Crop-Box!")
-        }
-        
-        // 6) DEBUG: Zeichne Quadrate
-        context.setStrokeColor(NSColor.yellow.withAlphaComponent(0.5).cgColor)
-        context.setLineWidth(2.0)
-        for (i, square) in squares.enumerated() {
-            let screenX = offX + square.x * s
-            let screenY = offY + square.y * s
-            let screenSize = square.size * s
-            
-            let rect = CGRect(x: screenX, y: screenY, width: screenSize, height: screenSize)
-            context.stroke(rect)
-            
-            print("   Screen Quadrat \(i): (\(screenX), \(screenY)), Size=\(screenSize)")
-        }
-        
-        // DEBUG: Zeichne Punkt am Spiralzentrum
-        context.setFillColor(NSColor.red.cgColor)
-        let centerDot = CGRect(x: startX - 5, y: startY - 5, width: 10, height: 10)
-        context.fill(centerDot)
-        
-        // 7) Zeichne Spirale von diesem Punkt aus
         context.setStrokeColor(NSColor.lightGray.withAlphaComponent(0.7).cgColor)
         context.setLineWidth(1.5)
+        context.addPath(transformedPath)
+        context.strokePath()
         
-        var posX = startX
-        var posY = startY
+        // Debug: Nucleus-Punkt zeichnen
+        let nucleusPoint = canonicalNucleus.applying(transform)
+        context.setFillColor(NSColor.red.cgColor)
+        let centerDot = CGRect(x: nucleusPoint.x - 4, y: nucleusPoint.y - 4, width: 8, height: 8)
+        context.fillEllipse(in: centerDot)
+    }
+
+    private func buildFibonacciSpiralPath(fibValues: [CGFloat], nucleus: CGPoint, clockwise: Bool) -> CGPath {
+        let path = CGMutablePath()
+        var center = nucleus
         var angle: CGFloat = 0
+        let turn: CGFloat = clockwise ? -(.pi / 2) : (.pi / 2)
+        let moveRotation: CGFloat = clockwise ? .pi : -.pi
+        let sweep: CGFloat = clockwise ? -(.pi / 2) : (.pi / 2)
         
-        for k in 0..<n {
-            if k >= 1 {
-                angle += .pi / 2
+        for index in 0..<fibValues.count {
+            if index >= 1 {
+                angle += turn
             }
             
-            if k >= 2 {
-                let fibValue = fib[k - 2]
-                let moveAngle = angle - .pi
-                let addX = s * fibValue * cos(moveAngle)
-                let addY = s * fibValue * sin(moveAngle)
-                posX += addX
-                posY += addY
+            if index >= 2 {
+                let offset = fibValues[index - 2]
+                let moveAngle = angle + moveRotation
+                center.x += offset * cos(moveAngle)
+                center.y += offset * sin(moveAngle)
             }
             
-            let radius = s * fib[k]
-            
-            context.addArc(
-                center: CGPoint(x: posX, y: posY),
-                radius: radius,
-                startAngle: angle,
-                endAngle: angle + .pi / 2,
-                clockwise: false
-            )
-            context.strokePath()
+            let radius = fibValues[index]
+            let endAngle = angle + sweep
+            path.addArc(center: center, radius: radius, startAngle: angle, endAngle: endAngle, clockwise: clockwise)
         }
         
-        context.restoreGState()
+        return path
+    }
+    
+    private func fibonacciTransform(for rect: CGRect, canonicalSize: CGSize, canonicalBounds: CGRect, orientation: FibonacciOrientation) -> CGAffineTransform {
+        let orientationTransform: CGAffineTransform
+        switch orientation {
+        case .bottomLeft:
+            orientationTransform = .identity
+        case .bottomRight:
+            orientationTransform = CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: canonicalSize.width, ty: 0)
+        case .topLeft:
+            orientationTransform = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: canonicalSize.height)
+        case .topRight:
+            orientationTransform = CGAffineTransform(a: -1, b: 0, c: 0, d: -1, tx: canonicalSize.width, ty: canonicalSize.height)
+        }
+        
+        let orientedBounds = canonicalBounds.applying(orientationTransform)
+        let scaleX = rect.width / orientedBounds.width
+        let scaleY = rect.height / orientedBounds.height
+        let scaleTransform = CGAffineTransform(scaleX: scaleX, y: scaleY)
+        
+        let translateTransform = CGAffineTransform(
+            translationX: rect.minX - orientedBounds.minX * scaleX,
+            y: rect.minY - orientedBounds.minY * scaleY
+        )
+        
+        let transform = orientationTransform
+            .concatenating(scaleTransform)
+            .concatenating(translateTransform)
+        return transform
     }
     
     private func drawCropBox(in imageRect: CGRect, context: CGContext) {

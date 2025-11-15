@@ -163,6 +163,21 @@ struct ContentView: View {
                     }
                 )
                 .onChange(of: targetRatio) { oldValue, newValue in
+                    // Wenn auf Custom gewechselt wird, übernehme vorheriges Ratio
+                    if case .custom = newValue {
+                        // Nur wenn vorher NICHT custom war
+                        switch oldValue {
+                        case .ratio16_9:
+                            customWidth = "16"
+                            customHeight = "9"
+                        case .ratio1_1:
+                            customWidth = "1"
+                            customHeight = "1"
+                        case .custom:
+                            break // Bereits custom, nichts tun
+                        }
+                    }
+                    
                     // Crop-Box neu berechnen wenn Zielformat geändert wird
                     updateCropBoxForNewImage()
                 }
@@ -234,15 +249,32 @@ struct ContentView: View {
         panel.allowsMultipleSelection = true  // Immer Multi-Selection
         
         if panel.runModal() == .OK {
-            loadBatchImages(from: panel.urls)
+            // Filtere Video-Dateien aus
+            let imageURLs = panel.urls.filter { url in
+                guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
+                    return true
+                }
+                // Nur Bilder, keine Videos
+                return type.conforms(to: .image) && !type.conforms(to: .movie) && !type.conforms(to: .video)
+            }
+            loadBatchImages(from: imageURLs)
         }
     }
     
     private func loadBatchImages(from urls: [URL]) {
-        let imageDatas = urls.compactMap { ImageService.loadImage(from: $0) }
+        // Filtere Video-Dateien aus
+        let imageURLs = urls.filter { url in
+            guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
+                return true
+            }
+            // Nur Bilder, keine Videos
+            return type.conforms(to: .image) && !type.conforms(to: .movie) && !type.conforms(to: .video)
+        }
+        
+        let imageDatas = imageURLs.compactMap { ImageService.loadImage(from: $0) }
         
         // MCU-Größe für JPEGs bestimmen
-        for (index, url) in urls.enumerated() {
+        for (index, url) in imageURLs.enumerated() {
             if imageDatas[index].format == .jpeg {
                 imageDatas[index].mcuSize = JPEGService.detectMCUSize(for: url)
             }
