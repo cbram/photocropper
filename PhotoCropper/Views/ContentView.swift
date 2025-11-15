@@ -10,14 +10,17 @@ import AppKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @StateObject private var batchManager = BatchImageManager()
+    @ObservedObject var batchManager: BatchImageManager
+    @StateObject private var keyboardMonitor = KeyboardMonitor()
+    @FocusState private var canvasHasFocus: Bool
     
     // Crop-Settings (gelten für aktuelles Bild)
     @State private var cropBox: CGRect = .zero
     @State private var targetRatio: AspectRatio = .ratio16_9
     @State private var cropMode: CropMode = .mcuSensitive
-    @State private var autoFallback: Bool = true
     @State private var showMCUGrid: Bool = false
+    @State private var compositionOverlay: CompositionOverlay = .none
+    @State private var showCompositionOverlay: Bool = false
     @State private var customWidth: String = "16"
     @State private var customHeight: String = "9"
     @State private var showBatchExport: Bool = false
@@ -81,8 +84,9 @@ struct ContentView: View {
                         ),
                         cropBox: $cropBox,
                         imageSize: displayImageData.pixelSize,
-                        showMCUGrid: showMCUGrid,
+                        showMCUGrid: showMCUGrid && !showCompositionOverlay,
                         mcuSize: displayImageData.mcuSize ?? CGSize(width: 8, height: 8),
+                        compositionOverlay: showCompositionOverlay ? compositionOverlay : .none,
                         targetAspectRatio: {
                             switch targetRatio {
                             case .ratio16_9:
@@ -101,6 +105,18 @@ struct ContentView: View {
                         }
                     )
                     .background(Color.black)
+                    .focused($canvasHasFocus)
+                    .onAppear {
+                        print("🖼️ Canvas appeared - Setting focus")
+                        canvasHasFocus = true
+                    }
+                    .onTapGesture {
+                        print("👆 Canvas tapped - Setting focus")
+                        canvasHasFocus = true
+                    }
+                    .onChange(of: canvasHasFocus) { oldValue, newValue in
+                        print("🎯 Canvas Focus changed: \(oldValue) -> \(newValue)")
+                    }
                 } else {
                     // Drag & Drop Bereich
                     ZStack {
@@ -130,8 +146,8 @@ struct ContentView: View {
                 ControlsView(
                     targetRatio: $targetRatio,
                     cropMode: $cropMode,
-                    autoFallback: $autoFallback,
                     showMCUGrid: $showMCUGrid,
+                    compositionOverlay: $compositionOverlay,
                     cropBox: $cropBox,
                     customWidth: $customWidth,
                     customHeight: $customHeight,
@@ -187,6 +203,22 @@ struct ContentView: View {
         .onChange(of: batchManager.currentIndex) { oldValue, newValue in
             // Wenn neues Bild ausgewählt wird
             loadCurrentBatchImage()
+        }
+        .onAppear {
+            print("📱 ContentView appeared - Starte Keyboard Monitor")
+            keyboardMonitor.onSpacePressed = {
+                print("⌨️ Space-Handler von KeyboardMonitor aufgerufen")
+                toggleCompositionOverlay()
+            }
+            keyboardMonitor.onEnterPressed = {
+                print("⌨️ Enter-Handler von KeyboardMonitor aufgerufen")
+                batchManager.nextImage()
+            }
+            keyboardMonitor.startMonitoring()
+        }
+        .onDisappear {
+            print("📱 ContentView disappeared - Stoppe Keyboard Monitor")
+            keyboardMonitor.stopMonitoring()
         }
     }
     
@@ -320,6 +352,19 @@ struct ContentView: View {
         customWidth = String(ratio.width)
         customHeight = String(ratio.height)
         targetRatio = .custom(width: ratio.width, height: ratio.height)
+    }
+    
+    private func toggleCompositionOverlay() {
+        print("🎯 toggleCompositionOverlay aufgerufen")
+        print("   compositionOverlay: \(compositionOverlay)")
+        print("   showCompositionOverlay VORHER: \(showCompositionOverlay)")
+        
+        if compositionOverlay != .none {
+            showCompositionOverlay.toggle()
+            print("   showCompositionOverlay NACHHER: \(showCompositionOverlay)")
+        } else {
+            print("   ⚠️ compositionOverlay ist .none - Toggle wird ignoriert")
+        }
     }
 }
 

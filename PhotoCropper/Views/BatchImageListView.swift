@@ -74,15 +74,14 @@ struct BatchImageListView: View {
             // Action Buttons
             HStack(spacing: 8) {
                 Button(action: {
-                    // Clear all
+                    // Close all photos (clear list but keep app open)
                     batchManager.clear()
                 }) {
                     HStack(spacing: 4) {
-                        Image(systemName: "trash")
-                        Text("Alle löschen")
+                        Image(systemName: "xmark.circle")
+                        Text("Alle schließen")
                     }
                     .font(.caption)
-                    .foregroundColor(.red)
                 }
                 .buttonStyle(.plain)
                 .disabled(batchManager.images.isEmpty)

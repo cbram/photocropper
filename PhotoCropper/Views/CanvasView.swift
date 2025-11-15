@@ -15,6 +15,7 @@ class CropCanvasView: NSView {
     var imageSize: CGSize = .zero
     var showMCUGrid: Bool = false
     var mcuSize: CGSize = CGSize(width: 8, height: 8)
+    var compositionOverlay: CompositionOverlay = .none
     
     var onCropBoxChanged: ((CGRect) -> Void)?
     var onRatioChanged: (() -> Void)?  // Callback wenn Ratio manuell geändert wird
@@ -48,15 +49,7 @@ class CropCanvasView: NSView {
         // Overlay für ausgeschnittene Bereiche
         drawOverlay(in: imageRect, context: context!)
         
-        // MCU-Grid zeichnen (optional)
-        if showMCUGrid {
-            drawMCUGrid(in: imageRect, context: context!)
-        }
-        
-        // Crop-Box zeichnen (roter Rahmen)
-        drawCropBox(in: imageRect, context: context!)
-        
-        // Handles NACH allem anderen zeichnen (damit sie immer sichtbar sind)
+        // Crop-Rect berechnen (wird für mehrere Dinge benötigt)
         let scaleX = imageRect.width / imageSize.width
         let scaleY = imageRect.height / imageSize.height
         let cropRect = CGRect(
@@ -65,6 +58,21 @@ class CropCanvasView: NSView {
             width: cropBox.width * scaleX,
             height: cropBox.height * scaleY
         )
+        
+        // MCU-Grid zeichnen (optional)
+        if showMCUGrid {
+            drawMCUGrid(in: imageRect, context: context!)
+        }
+        
+        // Crop-Box zeichnen (roter Rahmen)
+        drawCropBox(in: imageRect, context: context!)
+        
+        // Kompositions-Overlay zeichnen (optional) - INNERHALB der Crop-Box
+        if compositionOverlay != .none {
+            drawCompositionOverlay(in: cropRect, context: context!)
+        }
+        
+        // Handles NACH allem anderen zeichnen (damit sie immer sichtbar sind)
         drawHandles(in: cropRect, context: context!)
         
         // Info-Text zeichnen
@@ -156,6 +164,301 @@ class CropCanvasView: NSView {
             context.strokePath()
             y += mcuSize.height
         }
+    }
+    
+    private func drawCompositionOverlay(in imageRect: CGRect, context: CGContext) {
+        // Helles Grau für bessere Sichtbarkeit
+        context.setStrokeColor(NSColor.lightGray.withAlphaComponent(0.7).cgColor)
+        context.setLineWidth(1.5)
+        
+        switch compositionOverlay {
+        case .none:
+            break
+            
+        case .ruleOfThirds:
+            drawRuleOfThirds(in: imageRect, context: context)
+            
+        case .goldenRatio:
+            drawGoldenRatio(in: imageRect, context: context)
+            
+        case .fibonacciTopLeft:
+            drawFibonacciSpiral(in: imageRect, context: context, orientation: .topLeft)
+            
+        case .fibonacciTopRight:
+            drawFibonacciSpiral(in: imageRect, context: context, orientation: .topRight)
+            
+        case .fibonacciBottomLeft:
+            drawFibonacciSpiral(in: imageRect, context: context, orientation: .bottomLeft)
+            
+        case .fibonacciBottomRight:
+            drawFibonacciSpiral(in: imageRect, context: context, orientation: .bottomRight)
+        }
+    }
+    
+    private func drawRuleOfThirds(in rect: CGRect, context: CGContext) {
+        let width = rect.width
+        let height = rect.height
+        
+        // Vertikale Linien bei 1/3 und 2/3
+        let x1 = rect.minX + width / 3
+        let x2 = rect.minX + 2 * width / 3
+        
+        context.move(to: CGPoint(x: x1, y: rect.minY))
+        context.addLine(to: CGPoint(x: x1, y: rect.maxY))
+        context.strokePath()
+        
+        context.move(to: CGPoint(x: x2, y: rect.minY))
+        context.addLine(to: CGPoint(x: x2, y: rect.maxY))
+        context.strokePath()
+        
+        // Horizontale Linien bei 1/3 und 2/3
+        let y1 = rect.minY + height / 3
+        let y2 = rect.minY + 2 * height / 3
+        
+        context.move(to: CGPoint(x: rect.minX, y: y1))
+        context.addLine(to: CGPoint(x: rect.maxX, y: y1))
+        context.strokePath()
+        
+        context.move(to: CGPoint(x: rect.minX, y: y2))
+        context.addLine(to: CGPoint(x: rect.maxX, y: y2))
+        context.strokePath()
+    }
+    
+    private func drawGoldenRatio(in rect: CGRect, context: CGContext) {
+        let width = rect.width
+        let height = rect.height
+        let goldenRatio: CGFloat = 0.618
+        
+        // Horizontale Linien bei ~38.2% und ~61.8%
+        let y1 = rect.minY + height * (1 - goldenRatio)
+        let y2 = rect.minY + height * goldenRatio
+        
+        context.move(to: CGPoint(x: rect.minX, y: y1))
+        context.addLine(to: CGPoint(x: rect.maxX, y: y1))
+        context.strokePath()
+        
+        context.move(to: CGPoint(x: rect.minX, y: y2))
+        context.addLine(to: CGPoint(x: rect.maxX, y: y2))
+        context.strokePath()
+        
+        // Vertikale Linien bei ~38.2% und ~61.8%
+        let x1 = rect.minX + width * (1 - goldenRatio)
+        let x2 = rect.minX + width * goldenRatio
+        
+        context.move(to: CGPoint(x: x1, y: rect.minY))
+        context.addLine(to: CGPoint(x: x1, y: rect.maxY))
+        context.strokePath()
+        
+        context.move(to: CGPoint(x: x2, y: rect.minY))
+        context.addLine(to: CGPoint(x: x2, y: rect.maxY))
+        context.strokePath()
+    }
+    
+    enum FibonacciOrientation {
+        case topLeft, topRight, bottomLeft, bottomRight
+    }
+    
+    // Hilfsfunktion: Fibonacci-Zahl berechnen
+    private func fibonacci(_ n: Int) -> CGFloat {
+        if n <= 1 { return 1 }
+        var a: CGFloat = 1
+        var b: CGFloat = 1
+        for _ in 2...n {
+            let z = a
+            a += b
+            b = z
+        }
+        return a
+    }
+    
+    private func drawFibonacciSpiral(in rect: CGRect, context: CGContext, orientation: FibonacciOrientation) {
+        context.saveGState()
+        
+        // Nur TopLeft implementieren (die anderen später)
+        if orientation != .topLeft {
+            context.restoreGState()
+            return
+        }
+        
+        print("🔴 === FIBONACCI SPIRAL DEBUG ===")
+        print("🔴 Input rect (Crop-Box): (\(rect.minX), \(rect.minY)) bis (\(rect.maxX), \(rect.maxY))")
+        print("🔴 Input rect Größe: \(rect.width) x \(rect.height)")
+        
+        let n = 10 // Anzahl der Fibonacci-Quadrate
+        
+        // 1) Berechne Fibonacci-Folge
+        var fib: [CGFloat] = []
+        for i in 0..<n {
+            fib.append(fibonacci(i))
+        }
+        
+        print("🌀 Fibonacci-Folge: \(fib)")
+        
+        // 2) Quadrat-Tiling berechnen (lokale Koordinaten)
+        // Basierend auf dem Python-Code
+        var squares: [(x: CGFloat, y: CGFloat, size: CGFloat)] = []
+        
+        // Starte mit größtem Quadrat bei (0,0)
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        squares.append((x: 0, y: 0, size: fib[n-1]))
+        
+        var minX: CGFloat = 0
+        var maxX: CGFloat = fib[n-1]
+        var minY: CGFloat = 0
+        var maxY: CGFloat = fib[n-1]
+        
+        // Richtungen: right (1,0), up (0,-1), left (-1,0), down (0,1)
+        let dirs = [(1, 0), (0, -1), (-1, 0), (0, 1)]
+        
+        // Füge Quadrate iterativ hinzu (von groß nach klein)
+        for i in stride(from: n-2, through: 0, by: -1) {
+            let size = fib[i]
+            let dirIndex = (n - 1 - i) % 4
+            let (dx, dy) = dirs[dirIndex]
+            
+            // Berechne neue Position (wie im Python-Code)
+            if dx == 1 {  // right
+                x = maxX
+                y = maxY - size
+            } else if dx == -1 {  // left
+                x = minX - size
+                y = minY
+            } else if dy == -1 {  // up
+                x = minX
+                y = minY - size
+            } else {  // down (dy == 1)
+                x = maxX - size
+                y = maxY
+            }
+            
+            squares.append((x: x, y: y, size: size))
+            
+            // Update bounds
+            minX = min(minX, x)
+            minY = min(minY, y)
+            maxX = max(maxX, x + size)
+            maxY = max(maxY, y + size)
+            
+            print("   Quadrat \(n-1-i): Pos(\(x), \(y)), Größe=\(size), dir=\(dirIndex)")
+        }
+        
+        print("📦 Tiling bounds: x[\(minX)..\(maxX)], y[\(minY)..\(maxY)]")
+        
+        // 3) Bestimme innere Ecke (Spiralzentrum) - wie im Python-Code
+        let smallSquare = squares.last!
+        let x_small = smallSquare.x
+        let y_small = smallSquare.y
+        let s_small = smallSquare.size
+        let r = n % 4
+        
+        var spiralCenterX: CGFloat
+        var spiralCenterY: CGFloat
+        
+        switch r {
+        case 0:
+            spiralCenterX = x_small + s_small
+            spiralCenterY = y_small + s_small
+        case 1:
+            spiralCenterX = x_small
+            spiralCenterY = y_small + s_small
+        case 2:
+            spiralCenterX = x_small
+            spiralCenterY = y_small
+        default: // case 3
+            spiralCenterX = x_small + s_small
+            spiralCenterY = y_small
+        }
+        
+        print("🎯 Lokales Spiralzentrum: (\(spiralCenterX), \(spiralCenterY)) [r=\(r)]")
+        
+        // 4) Place on paper (wie im Python-Code)
+        let W = rect.width
+        let H = rect.height
+        let width = maxX - minX
+        let height = maxY - minY
+        
+        print("📏 Tiling-Größe: \(width) x \(height)")
+        print("📦 Crop-Box (Paper): \(W) x \(H)")
+        
+        // Skalierung: nutze kleinere Dimension
+        let s = min(W / width, H / height)
+        
+        print("📐 Skalierung: \(s)")
+        
+        // Zentriere das GESAMTE Tiling in der Crop-Box
+        let offX = rect.minX + (W - width * s) / 2 - minX * s
+        let offY = rect.minY + (H - height * s) / 2 - minY * s
+        
+        print("🎯 Offsets: X=\(offX), Y=\(offY))")
+        
+        // 5) Berechne Spiralzentrum auf dem "Papier" (Crop-Box)
+        let startX = offX + spiralCenterX * s
+        let startY = offY + spiralCenterY * s
+        
+        print("✨ Spiralzentrum auf Blatt: (\(startX), \(startY))")
+        print("🔴 Crop-Box (rect): (\(rect.minX), \(rect.minY)) bis (\(rect.maxX), \(rect.maxY))")
+        print("🔴 Crop-Box Größe: \(rect.width) x \(rect.height)")
+        
+        // Validierung
+        if startX < rect.minX || startX > rect.maxX || startY < rect.minY || startY > rect.maxY {
+            print("⚠️ WARNUNG: Spiralzentrum liegt außerhalb der Crop-Box!")
+        }
+        
+        // 6) DEBUG: Zeichne Quadrate
+        context.setStrokeColor(NSColor.yellow.withAlphaComponent(0.5).cgColor)
+        context.setLineWidth(2.0)
+        for (i, square) in squares.enumerated() {
+            let screenX = offX + square.x * s
+            let screenY = offY + square.y * s
+            let screenSize = square.size * s
+            
+            let rect = CGRect(x: screenX, y: screenY, width: screenSize, height: screenSize)
+            context.stroke(rect)
+            
+            print("   Screen Quadrat \(i): (\(screenX), \(screenY)), Size=\(screenSize)")
+        }
+        
+        // DEBUG: Zeichne Punkt am Spiralzentrum
+        context.setFillColor(NSColor.red.cgColor)
+        let centerDot = CGRect(x: startX - 5, y: startY - 5, width: 10, height: 10)
+        context.fill(centerDot)
+        
+        // 7) Zeichne Spirale von diesem Punkt aus
+        context.setStrokeColor(NSColor.lightGray.withAlphaComponent(0.7).cgColor)
+        context.setLineWidth(1.5)
+        
+        var posX = startX
+        var posY = startY
+        var angle: CGFloat = 0
+        
+        for k in 0..<n {
+            if k >= 1 {
+                angle += .pi / 2
+            }
+            
+            if k >= 2 {
+                let fibValue = fib[k - 2]
+                let moveAngle = angle - .pi
+                let addX = s * fibValue * cos(moveAngle)
+                let addY = s * fibValue * sin(moveAngle)
+                posX += addX
+                posY += addY
+            }
+            
+            let radius = s * fib[k]
+            
+            context.addArc(
+                center: CGPoint(x: posX, y: posY),
+                radius: radius,
+                startAngle: angle,
+                endAngle: angle + .pi / 2,
+                clockwise: false
+            )
+            context.strokePath()
+        }
+        
+        context.restoreGState()
     }
     
     private func drawCropBox(in imageRect: CGRect, context: CGContext) {
@@ -570,6 +873,7 @@ struct CanvasView: NSViewRepresentable {
     var imageSize: CGSize
     var showMCUGrid: Bool
     var mcuSize: CGSize
+    var compositionOverlay: CompositionOverlay
     var targetAspectRatio: CGFloat?  // Für Aspect-Ratio-Lock beim Dragging
     var onCropBoxChanged: ((CGRect) -> Void)?
     var onRatioChanged: (() -> Void)?
@@ -587,6 +891,7 @@ struct CanvasView: NSViewRepresentable {
         nsView.imageSize = imageSize
         nsView.showMCUGrid = showMCUGrid
         nsView.mcuSize = mcuSize
+        nsView.compositionOverlay = compositionOverlay
         nsView.targetAspectRatio = targetAspectRatio
         nsView.onCropBoxChanged = onCropBoxChanged
         nsView.onRatioChanged = onRatioChanged

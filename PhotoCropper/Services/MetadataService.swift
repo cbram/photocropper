@@ -12,6 +12,70 @@ import CoreGraphics
 /// Service für Metadaten-Operationen (EXIF/XMP)
 class MetadataService {
     
+    /// Liest existierende Subject-Tags aus und filtert PhotoCropper-Tags raus
+    private static func readNonPhotoCropperSubjectTags(exiftoolPath: String, imageURL: URL) -> [String] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: exiftoolPath)
+        process.arguments = ["-XMP-dc:Subject", "-s3", imageURL.path]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else {
+                return []
+            }
+            
+            // exiftool gibt Subject-Tags zeilenweise aus oder komma-separiert
+            let subjects = output.components(separatedBy: .newlines)
+                .flatMap { $0.components(separatedBy: ",") }
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && !$0.hasPrefix("PhotoCropper:") }
+            
+            return subjects
+        } catch {
+            print("⚠️ Fehler beim Lesen der Subject-Tags: \(error)")
+            return []
+        }
+    }
+    
+    /// Liest existierende IPTC Keywords aus und filtert PhotoCropper-Keywords raus
+    private static func readNonPhotoCropperIPTCKeywords(exiftoolPath: String, imageURL: URL) -> [String] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: exiftoolPath)
+        process.arguments = ["-IPTC:Keywords", "-s3", imageURL.path]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else {
+                return []
+            }
+            
+            // exiftool gibt Keywords zeilenweise aus oder komma-separiert
+            let keywords = output.components(separatedBy: .newlines)
+                .flatMap { $0.components(separatedBy: ",") }
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && !$0.hasPrefix("CropMode:") && !$0.hasPrefix("TargetRatio:") && !$0.hasPrefix("OriginalRatio:") }
+            
+            return keywords
+        } catch {
+            print("⚠️ Fehler beim Lesen der IPTC Keywords: \(error)")
+            return []
+        }
+    }
+    
     /// Speichert Crop-Metadaten in Bild-Datei mit exiftool (verlustfrei!)
     static func saveCropMetadata(
         imageURL: URL,
@@ -68,6 +132,13 @@ class MetadataService {
         print("  Image: \(imageURL.lastPathComponent)")
         print("  Size: \(imageSize.width)x\(imageSize.height)")
         print("  Crop: \(cropBox)")
+        print("  💡 3-Pass-Strategie:")
+        print("     PASS 1: Lösche alle XMP-crs:Crop*, XMP-dc:Subject und IPTC:Keywords")
+        print("     PASS 2: Schreibe neue Crop-Koordinaten + gefilterte Subject-Tags")
+        print("     PASS 3: Synchronisiere XMP→IPTC und aktualisiere IPTCDigest")
+        print("  📝 Crop-Infos werden gespeichert in:")
+        print("     - XMP-crs:CropTop/Left/Bottom/Right (Lightroom-kompatibel)")
+        print("     - XMP-dc:Subject (7 PhotoCropper-Felder für vollständige Crop-Info)")
         
         // Normalisierte Koordinaten berechnen
         let normalizedOrigin = CGPoint(
@@ -84,64 +155,183 @@ class MetadataService {
         
         print("  Normalized: origin=(\(normalizedOrigin.x), \(normalizedOrigin.y)) size=(\(normalizedSize.width), \(normalizedSize.height))")
         
-        // exiftool Kommando zusammenstellen
-        var pid: pid_t = 0
-        let argv: [UnsafeMutablePointer<CChar>?] = [
-            strdup(exiftoolPath),
-            strdup("-overwrite_original"),  // Kein _original Backup
-            strdup("-n"),  // Numeric mode (keine Formatierung)
-            
-            // XMP Tags (Adobe Camera Raw / Lightroom kompatibel)
-            // Diese Tags sind der Standard für Crop-Informationen!
-            strdup("-XMP-crs:CropTop=\(normalizedOrigin.y)"),
-            strdup("-XMP-crs:CropLeft=\(normalizedOrigin.x)"),
-            strdup("-XMP-crs:CropBottom=\(cropBottom)"),
-            strdup("-XMP-crs:CropRight=\(cropRight)"),
-            
-            // XMP Dublin Core für unsere Custom-Daten
-            strdup("-XMP-dc:Subject+=PhotoCropper:CropMode=\(mode.rawValue)"),
-            strdup("-XMP-dc:Subject+=PhotoCropper:TargetRatio=\(targetRatio.id)"),
-            strdup("-XMP-dc:Subject+=PhotoCropper:OriginalRatio=\(originalRatio)"),
-            strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginX=\(normalizedOrigin.x)"),
-            strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginY=\(normalizedOrigin.y)"),
-            strdup("-XMP-dc:Subject+=PhotoCropper:CropWidth=\(normalizedSize.width)"),
-            strdup("-XMP-dc:Subject+=PhotoCropper:CropHeight=\(normalizedSize.height)"),
-            
-            // IPTC Keywords als Fallback (sichtbar in Finder/Photos)
-            strdup("-IPTC:Keywords+=CropMode:\(mode.rawValue)"),
-            strdup("-IPTC:Keywords+=TargetRatio:\(targetRatio.id)"),
-            strdup("-IPTC:Keywords+=OriginalRatio:\(originalRatio)"),
-            
-            strdup(imageURL.path),
-            nil
-        ]
+        // 🔍 SCHRITT 0: Lese bestehende Tags aus und filtere PhotoCropper-Tags raus
+        let existingSubjects = readNonPhotoCropperSubjectTags(exiftoolPath: exiftoolPath, imageURL: imageURL)
+        let existingKeywords = readNonPhotoCropperIPTCKeywords(exiftoolPath: exiftoolPath, imageURL: imageURL)
         
+        if !existingSubjects.isEmpty {
+            print("  📋 Behalte \(existingSubjects.count) existierende Subject-Tags (nicht von PhotoCropper):")
+            for subject in existingSubjects {
+                print("     - \(subject)")
+            }
+        }
+        if !existingKeywords.isEmpty {
+            print("  📋 Behalte \(existingKeywords.count) existierende IPTC Keywords:")
+            for keyword in existingKeywords {
+                print("     - \(keyword)")
+            }
+        }
+        
+        print("  ⚠️ WICHTIG: PhotoCropper-Crop-Infos werden NUR in XMP-dc:Subject gespeichert:")
+        print("     ✓ PhotoCropper:CropMode, TargetRatio, OriginalRatio")
+        print("     ✓ PhotoCropper:CropOriginX, CropOriginY, CropWidth, CropHeight")
+        print("     → Dein Ausleseprogramm sollte XMP-dc:Subject lesen, NICHT IPTC:Keywords!")
+        
+        // 1️⃣ PASS 1: LÖSCHEN - Alle Crop-Tags und Subject-Tags entfernen
+        print("  🧹 PASS 1: Lösche alte Tags (OHNE -n, da sonst CropConstrainToUnitSquare nicht gelöscht wird!)...")
+        
+        var argv1: [UnsafeMutablePointer<CChar>?] = []
+        argv1.append(strdup(exiftoolPath))
+        argv1.append(strdup("-overwrite_original"))
+        // KEIN -n hier! Das "-n" Flag verhindert das Löschen von numerischen Tags wie CropConstrainToUnitSquare!
+        
+        // XMP-crs Crop-Tags löschen
+        argv1.append(strdup("-XMP-crs:CropTop="))
+        argv1.append(strdup("-XMP-crs:CropLeft="))
+        argv1.append(strdup("-XMP-crs:CropBottom="))
+        argv1.append(strdup("-XMP-crs:CropRight="))
+        argv1.append(strdup("-XMP-crs:CropAngle="))
+        argv1.append(strdup("-XMP-crs:CropConstrainToWarp="))
+        argv1.append(strdup("-XMP-crs:CropConstrainToUnitSquare="))
+        argv1.append(strdup("-XMP-crs:HasCrop="))
+        argv1.append(strdup("-XMP-crs:HasSettings="))
+        
+        // ALLE Subject-Tags löschen (wird in Pass 2 neu geschrieben)
+        argv1.append(strdup("-XMP-dc:Subject="))
+        
+        // ALLE IPTC Keywords löschen (um Duplikate zu vermeiden)
+        argv1.append(strdup("-IPTC:Keywords="))
+        
+        argv1.append(strdup(imageURL.path))
+        argv1.append(nil)
+        
+        var pid1: pid_t = 0
         let envp: [UnsafeMutablePointer<CChar>?] = [
             strdup("PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"),
             nil
         ]
         
-        print("  🚀 Führe exiftool aus...")
-        let status = posix_spawn(&pid, exiftoolPath, nil, nil, argv, envp)
+        let status1 = posix_spawn(&pid1, exiftoolPath, nil, nil, argv1, envp)
+        argv1.forEach { if let ptr = $0 { free(ptr) } }
         
-        // Cleanup
-        argv.forEach { if let ptr = $0 { free(ptr) } }
-        envp.forEach { if let ptr = $0 { free(ptr) } }
-        
-        if status == 0 {
-            var exitStatus: Int32 = 0
-            waitpid(pid, &exitStatus, 0)
-            let actualExit = (exitStatus >> 8) & 0xFF
+        if status1 == 0 {
+            var exitStatus1: Int32 = 0
+            waitpid(pid1, &exitStatus1, 0)
+            let actualExit1 = (exitStatus1 >> 8) & 0xFF
             
-            if actualExit == 0 {
-                print("  ✅ exiftool erfolgreich - Metadaten geschrieben ohne Bildveränderung!")
+            if actualExit1 != 0 {
+                print("  ❌ PASS 1 fehlgeschlagen: exit code \(actualExit1)")
+                envp.forEach { if let ptr = $0 { free(ptr) } }
+                return .failure(MetadataServiceError.exiftoolFailed)
+            }
+            print("  ✅ PASS 1 erfolgreich")
+        } else {
+            print("  ❌ PASS 1 posix_spawn failed: \(status1)")
+            envp.forEach { if let ptr = $0 { free(ptr) } }
+            return .failure(MetadataServiceError.exiftoolFailed)
+        }
+        
+        // 2️⃣ PASS 2: SETZEN - Neue Crop-Tags und gefilterte Subject-Tags schreiben
+        print("  📝 PASS 2: Schreibe neue Tags...")
+        
+        var argv2: [UnsafeMutablePointer<CChar>?] = []
+        argv2.append(strdup(exiftoolPath))
+        argv2.append(strdup("-overwrite_original"))
+        argv2.append(strdup("-n"))
+        argv2.append(strdup("-codedcharacterset=utf8"))
+        
+        // Neue XMP-crs Crop-Tags
+        argv2.append(strdup("-XMP-crs:CropTop=\(normalizedOrigin.y)"))
+        argv2.append(strdup("-XMP-crs:CropLeft=\(normalizedOrigin.x)"))
+        argv2.append(strdup("-XMP-crs:CropBottom=\(cropBottom)"))
+        argv2.append(strdup("-XMP-crs:CropRight=\(cropRight)"))
+        
+        // Existierende (nicht-PhotoCropper) Subject-Tags
+        for subject in existingSubjects {
+            argv2.append(strdup("-XMP-dc:Subject+=\(subject)"))
+        }
+        
+        // Neue PhotoCropper Subject-Tags
+        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropMode=\(mode.rawValue)"))
+        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:TargetRatio=\(targetRatio.id)"))
+        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:OriginalRatio=\(originalRatio)"))
+        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginX=\(normalizedOrigin.x)"))
+        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginY=\(normalizedOrigin.y)"))
+        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropWidth=\(normalizedSize.width)"))
+        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropHeight=\(normalizedSize.height)"))
+        
+        // Existierende (nicht-PhotoCropper) IPTC Keywords wieder hinzufügen
+        if !existingKeywords.isEmpty {
+            for keyword in existingKeywords {
+                argv2.append(strdup("-IPTC:Keywords+=\(keyword)"))
+            }
+        }
+        
+        argv2.append(strdup(imageURL.path))
+        argv2.append(nil)
+        
+        var pid2: pid_t = 0
+        
+        let status2 = posix_spawn(&pid2, exiftoolPath, nil, nil, argv2, envp)
+        argv2.forEach { if let ptr = $0 { free(ptr) } }
+        
+        if status2 == 0 {
+            var exitStatus2: Int32 = 0
+            waitpid(pid2, &exitStatus2, 0)
+            let actualExit2 = (exitStatus2 >> 8) & 0xFF
+            
+            if actualExit2 != 0 {
+                print("  ❌ PASS 2 fehlgeschlagen: exit code \(actualExit2)")
+                envp.forEach { if let ptr = $0 { free(ptr) } }
+                return .failure(MetadataServiceError.exiftoolFailed)
+            }
+            print("  ✅ PASS 2 erfolgreich")
+        } else {
+            print("  ❌ PASS 2 posix_spawn failed: \(status2)")
+            envp.forEach { if let ptr = $0 { free(ptr) } }
+            return .failure(MetadataServiceError.exiftoolFailed)
+        }
+        
+        // 3️⃣ PASS 3: SYNCHRONISATION - XMP→IPTC sync und IPTCDigest aktualisieren
+        print("  🔄 PASS 3: Synchronisiere XMP→IPTC...")
+        
+        var argv3: [UnsafeMutablePointer<CChar>?] = []
+        argv3.append(strdup(exiftoolPath))
+        argv3.append(strdup("-overwrite_original"))
+        argv3.append(strdup("-codedcharacterset=utf8"))
+        
+        // Synchronisiere XMP-dc:Subject → IPTC:Keywords
+        // Dies ist der exakte Befehl, der beim User funktioniert hat!
+        argv3.append(strdup("-IPTC:Keywords<XMP-dc:Subject"))
+        
+        argv3.append(strdup(imageURL.path))
+        argv3.append(nil)
+        
+        var pid3: pid_t = 0
+        
+        let status3 = posix_spawn(&pid3, exiftoolPath, nil, nil, argv3, envp)
+        argv3.forEach { if let ptr = $0 { free(ptr) } }
+        
+        if status3 == 0 {
+            var exitStatus3: Int32 = 0
+            waitpid(pid3, &exitStatus3, 0)
+            let actualExit3 = (exitStatus3 >> 8) & 0xFF
+            
+            if actualExit3 == 0 {
+                print("  ✅ PASS 3 erfolgreich - XMP↔IPTC synchronisiert, IPTCDigest aktualisiert!")
+                print("  ✅ Metadaten vollständig geschrieben ohne Bildveränderung!")
+                envp.forEach { if let ptr = $0 { free(ptr) } }
                 return .success(())
             } else {
-                print("  ❌ exiftool exit code: \(actualExit)")
+                print("  ❌ PASS 3 fehlgeschlagen: exit code \(actualExit3)")
+                print("  ⚠️ Metadaten wurden geschrieben, aber Synchronisation fehlgeschlagen")
+                envp.forEach { if let ptr = $0 { free(ptr) } }
                 return .failure(MetadataServiceError.exiftoolFailed)
             }
         } else {
-            print("  ❌ posix_spawn failed: \(status)")
+            print("  ❌ PASS 3 posix_spawn failed: \(status3)")
+            print("  ⚠️ Metadaten wurden geschrieben, aber Synchronisation fehlgeschlagen")
+            envp.forEach { if let ptr = $0 { free(ptr) } }
             return .failure(MetadataServiceError.exiftoolFailed)
         }
     }

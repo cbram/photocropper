@@ -10,8 +10,8 @@ import SwiftUI
 struct ControlsView: View {
     @Binding var targetRatio: AspectRatio
     @Binding var cropMode: CropMode
-    @Binding var autoFallback: Bool
     @Binding var showMCUGrid: Bool
+    @Binding var compositionOverlay: CompositionOverlay
     @Binding var cropBox: CGRect
     @Binding var customWidth: String
     @Binding var customHeight: String
@@ -62,9 +62,32 @@ struct ControlsView: View {
                     Text("Standard (Fallback)").tag(CropMode.standard)
                 }
                 .pickerStyle(.radioGroup)
+            }
+            
+            Divider()
+            
+            // Kompositions-Overlay
+            VStack(alignment: .leading, spacing: 10) {
+                Text("KOMPOSITIONS-OVERLAY")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
                 
-                Toggle("Auto-Fallback aktivieren", isOn: $autoFallback)
-                    .padding(.leading, 20)
+                Picker("Overlay", selection: $compositionOverlay) {
+                    ForEach(CompositionOverlay.allCases, id: \.self) { overlay in
+                        Text(overlay.displayName).tag(overlay)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "keyboard")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Leertaste: Overlay ein/ausblenden")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.leading, 20)
             }
             
             Divider()
