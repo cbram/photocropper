@@ -324,21 +324,22 @@ struct BatchExportView: View {
             
             self.exportResults.append(result)
             
-            // Mark as exported (must be on main thread!)
+            // Mark as exported and update counter (must be on main thread!)
             DispatchQueue.main.async {
                 if result.success {
                     item.status = .exported
                 } else {
                     item.status = .error(result.message)
                 }
-            }
-            
-            self.currentExportIndex += 1
-            
-            // Next image (with small delay for UI update)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                print("🔄 Starting next image...")
-                self.exportNextImage()
+                
+                // Increment counter here to avoid showing "6 of 5" briefly
+                self.currentExportIndex += 1
+                
+                // Next image (with small delay for UI update)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    print("🔄 Starting next image...")
+                    self.exportNextImage()
+                }
             }
         }
     }
