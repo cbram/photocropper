@@ -455,18 +455,19 @@ struct ContentView: View {
         guard case .custom(let w, let h) = effectiveTargetRatio else { return }
         guard w > 0 && h > 0 else { return }
         
-        let newRatio = Double(w) / Double(h)
+        // Calculate the current ratio from the actual crop box
         let currentRatio = cropBox.width / cropBox.height
+        let newRatio = Double(w) / Double(h)
+        
+        // If the ratios are very close, the change came from drag operation updating the text fields
+        // In this case, do nothing (the box is already correct)
+        if abs(newRatio - currentRatio) < 0.001 {
+            return
+        }
         
         var newBox = cropBox
         
         // Adjust size based on which dimension should stay closer to current
-        if abs(newRatio - currentRatio) < 0.01 {
-            // Ratio barely changed, keep box as is
-            return
-        }
-        
-        // Keep the smaller dimension and calculate the other
         if newRatio > currentRatio {
             // New ratio is wider - keep height, adjust width
             newBox.size.width = newBox.size.height * CGFloat(newRatio)
@@ -484,7 +485,13 @@ struct ContentView: View {
             newBox = CropEngine.centerCropBox(cropBox: newBox, imageSize: displayImage.pixelSize)
         }
         
+        // Set flag before updating to prevent recursion
+        isUpdatingFromDrag = true
         updateCropBox(newBox)
+        // Reset flag immediately after - the onChange check will still prevent recursion
+        DispatchQueue.main.async {
+            self.isUpdatingFromDrag = false
+        }
     }
     
     private func updateCropBox(_ newBox: CGRect) {
