@@ -2,55 +2,124 @@
 //  JPEGService.swift
 //  PhotoCropper
 //
-//  Handhabt JPEG-spezifische Operationen: MCU-Parsing, jpegtran-Wrapper
+//  Handles JPEG-specific operations: MCU parsing, jpegtran wrapper
 //
 
 import Foundation
 import AppKit
 import CoreGraphics
 
-/// Service für JPEG-Operationen mit MCU-Unterstützung
+// MARK: - Constants
+
+/// Constants for JPEG operations
+private enum JPEGConstants {
+    /// Standard MCU (Minimum Coded Unit) sizes for JPEG images
+    static let standardMCUSize = CGSize(width: 8, height: 8)
+    
+    /// Possible installation paths for jpegtran binary
+    static let jpegtranPaths = [
+        "/opt/homebrew/bin/jpegtran",  // Homebrew on Apple Silicon
+        "/usr/local/bin/jpegtran",      // Homebrew on Intel
+        "/usr/bin/jpegtran",            // System installation
+        "/opt/local/bin/jpegtran"       // MacPorts
+    ]
+    
+    /// Environment PATH for spawned processes
+    static let processPath = "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+}
+
+// MARK: - JPEG Service
+
+/// Service for JPEG-specific operations with MCU (Minimum Coded Unit) support
+///
+/// This service provides lossless JPEG cropping using the jpegtran tool,
+/// MCU grid snapping for optimal compression preservation, and JPEG format detection.
+///
+/// ## MCU (Minimum Coded Unit)
+/// JPEG images are compressed in blocks called MCUs, typically 8×8 or 16×16 pixels.
+/// For truly lossless cropping, crop coordinates must align with MCU boundaries.
+///
+/// ## jpegtran Requirement
+/// This service requires the jpegtran command-line tool from libjpeg-turbo.
+/// Install via Homebrew: `brew install jpeg-turbo`
 class JPEGService {
     
-    /// Prüft ob jpegtran verfügbar ist
+    // MARK: - jpegtran Availability
+    
+    /// Checks if jpegtran is available on the system
+    ///
+    /// Searches for jpegtran in common installation paths:
+    /// - `/opt/homebrew/bin/jpegtran` (Homebrew on Apple Silicon)
+    /// - `/usr/local/bin/jpegtran` (Homebrew on Intel)
+    /// - `/usr/bin/jpegtran` (System installation)
+    /// - `/opt/local/bin/jpegtran` (MacPorts)
+    ///
+    /// - Returns: `true` if jpegtran is found, `false` otherwise
     static func isJPEGTranAvailable() -> Bool {
-        // Prüfe bekannte Installationsorte
-        let possiblePaths = [
-            "/opt/homebrew/bin/jpegtran",  // Homebrew auf Apple Silicon
-            "/usr/local/bin/jpegtran",      // Homebrew auf Intel
-            "/usr/bin/jpegtran",            // System-Installation
-            "/opt/local/bin/jpegtran"       // MacPorts
-        ]
-        
-        let available = possiblePaths.contains { FileManager.default.fileExists(atPath: $0) }
-        print("🔍 jpegtran verfügbar: \(available)")
+        let available = findJPEGTranPath() != nil
+        print("🔍 jpegtran available: \(available)")
         return available
     }
     
-    /// Extrahiert MCU-Größe aus JPEG (vereinfacht: typischerweise 8x8, 8x16 oder 16x16)
-    /// Für präzise MCU-Erkennung müsste man libjpeg direkt nutzen
+    /// Finds the path to the jpegtran executable
+    ///
+    /// - Returns: Full path to jpegtran if found, `nil` otherwise
+    private static func findJPEGTranPath() -> String? {
+        return JPEGConstants.jpegtranPaths.first { 
+            FileManager.default.fileExists(atPath: $0) 
+        }
+    }
+    
+    // MARK: - MCU Detection & Snapping
+    
+    /// Detects the MCU (Minimum Coded Unit) size for a JPEG image
+    ///
+    /// This is a simplified implementation that returns the standard MCU size (8×8).
+    /// A complete implementation would use libjpeg to determine the actual MCU size
+    /// based on chroma subsampling (4:4:4, 4:2:2, 4:2:0, etc.).
+    ///
+    /// - Parameter imageURL: URL of the JPEG file
+    /// - Returns: MCU size, or `nil` if detection fails
+    ///
+    /// ## Common MCU Sizes
+    /// - **8×8**: Standard for 4:4:4 subsampling (no chroma subsampling)
+    /// - **8×16** or **16×8**: Common for 4:2:2 subsampling
+    /// - **16×16**: Common for 4:2:0 subsampling (most JPEGs)
+    ///
+    /// - Note: Currently returns 8×8 for all images. For precise detection,
+    ///   libjpeg integration would be needed.
     static func detectMCUSize(for imageURL: URL) -> CGSize? {
-        // Vereinfachte Implementierung: Standard-MCU-Größen
-        // In einer vollständigen Implementierung würde man libjpeg nutzen
-        // um die tatsächliche MCU-Größe zu bestimmen
-        
+        // Verify it's a valid image
         guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
-              let imageRef = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+              CGImageSourceCreateImageAtIndex(imageSource, 0, nil) != nil else {
             return nil
         }
         
-        let _ = imageRef.width
-        let _ = imageRef.height
-        
-        // Typische MCU-Größen: 8x8, 8x16, 16x8, 16x16
-        // Für Chroma-Subsampling: 8x8 für Luma, 8x16 oder 16x16 für Chroma
-        
-        // Standard: 8x8 MCU-Blöcke (häufigste Variante)
-        // Dies ist eine Vereinfachung - für präzise Erkennung bräuchte man libjpeg
-        return CGSize(width: 8, height: 8)
+        // Return standard MCU size (8×8)
+        // TODO: Implement actual MCU detection using libjpeg for precise sizes
+        return JPEGConstants.standardMCUSize
     }
     
-    /// Snappt Koordinaten auf nächste MCU-Grenze
+    /// Snaps coordinates to the nearest MCU grid boundaries
+    ///
+    /// For lossless JPEG cropping, crop coordinates must align with MCU boundaries.
+    /// This method adjusts the crop rectangle:
+    /// - Origin is rounded **down** to the nearest MCU boundary
+    /// - Size is rounded **up** to the nearest MCU boundary
+    ///
+    /// - Parameters:
+    ///   - coordinates: Original crop rectangle
+    ///   - mcuSize: MCU size (typically 8×8 or 16×16)
+    ///
+    /// - Returns: Adjusted crop rectangle aligned to MCU grid
+    ///
+    /// Example:
+    /// ```swift
+    /// let original = CGRect(x: 11, y: 13, width: 100, height: 100)
+    /// let mcuSize = CGSize(width: 8, height: 8)
+    /// let snapped = JPEGService.snapToMCUGrid(coordinates: original, mcuSize: mcuSize)
+    /// // snapped = CGRect(x: 8, y: 8, width: 104, height: 104)
+    /// ```
     static func snapToMCUGrid(coordinates: CGRect, mcuSize: CGSize) -> CGRect {
         let snappedX = floor(coordinates.origin.x / mcuSize.width) * mcuSize.width
         let snappedY = floor(coordinates.origin.y / mcuSize.height) * mcuSize.height
@@ -65,128 +134,156 @@ class JPEGService {
         )
     }
     
-    /// Führt verlustfreies Cropping mit jpegtran durch
-    static func cropLossless(imageURL: URL, cropRect: CGRect, outputURL: URL) -> Result<Void, Error> {
-        guard isJPEGTranAvailable() else {
-            return .failure(JPEGServiceError.jpegtranNotAvailable)
+    // MARK: - Lossless Cropping
+    
+    /// Performs lossless JPEG cropping using jpegtran
+    ///
+    /// This method uses the jpegtran tool from libjpeg-turbo to crop a JPEG image
+    /// without recompression, preserving image quality and metadata.
+    ///
+    /// - Parameters:
+    ///   - imageURL: URL of the source JPEG file
+    ///   - cropRect: Crop rectangle in pixel coordinates (should be MCU-aligned)
+    ///   - outputURL: URL where the cropped JPEG will be saved
+    ///
+    /// - Returns: Result indicating success or failure with detailed error
+    ///
+    /// ## Requirements
+    /// - jpegtran must be installed (`brew install jpeg-turbo`)
+    /// - Source file must be a valid JPEG
+    /// - Crop coordinates should be aligned to MCU boundaries for true lossless operation
+    ///
+    /// ## jpegtran Command
+    /// The method executes: `jpegtran -crop WxH+X+Y -copy all -outfile output input`
+    ///
+    /// Example:
+    /// ```swift
+    /// let result = JPEGService.cropLossless(
+    ///     imageURL: sourceURL,
+    ///     cropRect: CGRect(x: 16, y: 16, width: 800, height: 600),
+    ///     outputURL: destURL
+    /// )
+    /// ```
+    static func cropLossless(imageURL: URL, cropRect: CGRect, outputURL: URL) -> Result<Void, JPEGServiceError> {
+        // Check if jpegtran is available
+        guard let jpegtranPath = findJPEGTranPath() else {
+            print("❌ jpegtran not found")
+            return .failure(.jpegtranNotAvailable)
         }
         
-        // jpegtran erwartet Integer-Koordinaten
+        // Build crop arguments
+        let cropArgument = buildCropArgument(from: cropRect)
+        
+        print("✂️ Lossless JPEG crop: \(cropArgument)")
+        print("   Input:  \(imageURL.lastPathComponent)")
+        print("   Output: \(outputURL.lastPathComponent)")
+        
+        // Execute crop command
+        let executeResult = executeCropCommand(
+            jpegtranPath: jpegtranPath,
+            cropArgument: cropArgument,
+            inputURL: imageURL,
+            outputURL: outputURL
+        )
+        
+        // Check execution result
+        switch executeResult {
+        case .success:
+            // Validate output
+            return validateCropOutput(at: outputURL)
+        case .failure(let error):
+            return .failure(.cropFailed(error.localizedDescription))
+        }
+    }
+    
+    // MARK: - Private Helpers
+    
+    /// Builds the crop argument string for jpegtran
+    ///
+    /// - Parameter cropRect: Crop rectangle in pixel coordinates
+    /// - Returns: Crop argument in format "WxH+X+Y"
+    private static func buildCropArgument(from cropRect: CGRect) -> String {
         let x = Int(cropRect.origin.x)
         let y = Int(cropRect.origin.y)
         let w = Int(cropRect.width)
         let h = Int(cropRect.height)
         
-        // jpegtran-Pfad finden (verschiedene Installationsorte)
-        let possiblePaths = [
-            "/opt/homebrew/bin/jpegtran",  // Homebrew auf Apple Silicon
-            "/usr/local/bin/jpegtran",      // Homebrew auf Intel
-            "/usr/bin/jpegtran",            // System-Installation
-            "/opt/local/bin/jpegtran"       // MacPorts
-        ]
+        return "\(w)x\(h)+\(x)+\(y)"
+    }
+    
+    /// Executes the jpegtran crop command
+    ///
+    /// - Parameters:
+    ///   - jpegtranPath: Full path to jpegtran executable
+    ///   - cropArgument: Crop argument string (e.g., "800x600+16+16")
+    ///   - inputURL: Source JPEG file URL
+    ///   - outputURL: Destination JPEG file URL
+    ///
+    /// - Returns: Result indicating success or failure
+    private static func executeCropCommand(
+        jpegtranPath: String,
+        cropArgument: String,
+        inputURL: URL,
+        outputURL: URL
+    ) -> Result<Void, ProcessExecutorError> {
         
-        guard let jpegtranPath = possiblePaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
-            print("❌ jpegtran nicht gefunden in:", possiblePaths)
-            return .failure(JPEGServiceError.jpegtranNotAvailable)
-        }
-        
-        print("✅ jpegtran gefunden in: \(jpegtranPath)")
-        print("📍 Input:  \(imageURL.path)")
-        print("📍 Output: \(outputURL.path)")
-        print("📐 Crop: \(w)x\(h)+\(x)+\(y)")
-        
-        // NEUER ANSATZ: Rufe jpegtran DIREKT auf (nicht über Shell!)
-        // Das vermeidet alle Quoting-Probleme
-        
-        let cropArg = "\(w)x\(h)+\(x)+\(y)"
-        
-        print("🔧 Direkter Aufruf: \(jpegtranPath) -crop \(cropArg) -copy all [input] -outfile [output]")
-        print("⏳ Starte posix_spawn...")
-        
-        // posix_spawn benötigt C-Arrays - DIREKT jpegtran aufrufen
-        var pid: pid_t = 0
-        
-        // WICHTIG: jpegtran Syntax ist: jpegtran [switches] -outfile output input
-        // Der Input-File muss als LETZTES Argument kommen!
-        let argStrings = [
-            jpegtranPath,
+        // Build arguments for jpegtran
+        // Syntax: jpegtran -crop WxH+X+Y -copy all -outfile output input
+        let arguments = [
             "-crop",
-            cropArg,
+            cropArgument,
             "-copy",
             "all",
             "-outfile",
             outputURL.path,
-            imageURL.path              // Input file als LETZTES!
+            inputURL.path  // Input file must be last argument
         ]
         
-        print("📋 argv-Liste (KORRIGIERTE Reihenfolge):")
-        for (index, arg) in argStrings.enumerated() {
-            print("  argv[\(index)] = \"\(arg)\"")
-        }
+        // Set up environment with PATH
+        let environment = [JPEGConstants.processPath]
         
-        let argv: [UnsafeMutablePointer<CChar>?] = [
-            strdup(jpegtranPath),              // argv[0] = Executable
-            strdup("-crop"),                   // argv[1]
-            strdup(cropArg),                   // argv[2]
-            strdup("-copy"),                   // argv[3]
-            strdup("all"),                     // argv[4]
-            strdup("-outfile"),                // argv[5]
-            strdup(outputURL.path),            // argv[6] = Output file
-            strdup(imageURL.path),             // argv[7] = Input file (LETZTES ARG!)
-            nil                                // argv[8] = NULL terminator
-        ]
-        
-        let envp: [UnsafeMutablePointer<CChar>?] = [
-            strdup("PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"),
-            nil
-        ]
-        
-        print("🚀 Rufe posix_spawn auf...")
-        let status = posix_spawn(&pid, jpegtranPath, nil, nil, argv, envp)
-        print("📊 posix_spawn status: \(status), pid: \(pid)")
-        
-        // Cleanup
-        argv.forEach { if let ptr = $0 { free(ptr) } }
-        envp.forEach { if let ptr = $0 { free(ptr) } }
-        
-        if status == 0 {
-            print("⏱️ Warte auf Prozess-Ende (pid: \(pid))...")
-            // Warte auf Prozess-Ende
-            var exitStatus: Int32 = 0
-            let waitResult = waitpid(pid, &exitStatus, 0)
-            print("📊 waitpid result: \(waitResult), exitStatus: \(exitStatus)")
-            
-            let actualExit = (exitStatus >> 8) & 0xFF  // Extrahiere echten Exit-Code
-            print("📊 Extrahierter Exit-Code: \(actualExit)")
-            
-            if actualExit == 0 {
-                print("✅ jpegtran erfolgreich ausgeführt")
-                
-                // Prüfe ob Output-Datei existiert
-                let fileExists = FileManager.default.fileExists(atPath: outputURL.path)
-                print("📁 Output-Datei existiert: \(fileExists)")
-                
-                if fileExists {
-                    let fileSize = try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64
-                    print("📏 Output-Datei Größe: \(fileSize ?? 0) bytes")
-                    return .success(())
-                } else {
-                    print("❌ Output-Datei wurde nicht erstellt")
-                    return .failure(JPEGServiceError.cropFailed("Output-Datei wurde nicht erstellt"))
-                }
-            } else {
-                print("❌ jpegtran fehlgeschlagen mit exit code: \(actualExit)")
-                return .failure(JPEGServiceError.cropFailed("jpegtran exit code: \(actualExit)"))
-            }
-        } else {
-            print("❌ posix_spawn fehlgeschlagen mit status: \(status)")
-            let errorStr = String(cString: strerror(status))
-            print("❌ Error: \(errorStr)")
-            return .failure(JPEGServiceError.cropFailed("posix_spawn failed: \(status) - \(errorStr)"))
-        }
+        // Execute using ProcessExecutor
+        return ProcessExecutor.executeAndVerify(
+            command: jpegtranPath,
+            arguments: arguments,
+            environment: environment
+        )
     }
     
-    /// Prüft ob eine Datei ein JPEG ist
+    /// Validates that the crop output file was created successfully
+    ///
+    /// - Parameter outputURL: URL of the output file to validate
+    /// - Returns: Result indicating success or failure
+    private static func validateCropOutput(at outputURL: URL) -> Result<Void, JPEGServiceError> {
+        // Check if output file exists
+        guard FileManager.default.fileExists(atPath: outputURL.path) else {
+            print("❌ Output file was not created")
+            return .failure(.cropFailed("Output file was not created"))
+        }
+        
+        // Check file size for verification
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: outputURL.path),
+           let fileSize = attributes[.size] as? Int64 {
+            
+            guard fileSize > 0 else {
+                print("❌ Output file is empty")
+                return .failure(.cropFailed("Output file is empty"))
+            }
+            
+            print("✅ Cropped successfully (\(fileSize) bytes)")
+        } else {
+            print("✅ Cropped successfully")
+        }
+        
+        return .success(())
+    }
+    
+    // MARK: - Format Detection
+    
+    /// Checks if a file is a JPEG image
+    ///
+    /// - Parameter url: URL of the file to check
+    /// - Returns: `true` if the file is a JPEG, `false` otherwise
     static func isJPEG(url: URL) -> Bool {
         guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
               let uti = CGImageSourceGetType(imageSource) else {
@@ -196,18 +293,22 @@ class JPEGService {
     }
 }
 
-/// JPEG-Service-Fehler
+// MARK: - JPEG Service Errors
+
+/// Errors that can occur during JPEG service operations
 enum JPEGServiceError: LocalizedError {
+    /// jpegtran tool is not installed on the system
     case jpegtranNotAvailable
+    
+    /// Cropping operation failed with a specific reason
     case cropFailed(String)
     
     var errorDescription: String? {
         switch self {
         case .jpegtranNotAvailable:
-            return "jpegtran ist nicht installiert. Bitte installieren Sie es mit: brew install jpeg-turbo"
+            return "jpegtran is not installed. Please install it with: brew install jpeg-turbo"
         case .cropFailed(let message):
-            return "Cropping fehlgeschlagen: \(message)"
+            return "Cropping failed: \(message)"
         }
     }
 }
-

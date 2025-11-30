@@ -16,6 +16,7 @@ struct ControlsView: View {
     @Binding var customHeight: String
     
     var imageSize: CGSize
+    var imageFormat: ImageFormat?  // NEW: To determine if MCU grid should be available
     var onCenter: () -> Void
     var onReset: () -> Void
     var onMaximize: () -> Void
@@ -132,13 +133,27 @@ struct ControlsView: View {
                     Text(OverlayGuide.fibonacciBottomRight.displayName)
                         .tag(OverlayGuide.fibonacciBottomRight)
                     
-                    // MCU Grid (technical overlay) - at the bottom
-                    Text(OverlayGuide.mcuGrid.displayName)
-                        .tag(OverlayGuide.mcuGrid)
+                    // MCU Grid (technical overlay) - always visible
+                    // Visually indicate if disabled (non-JPEG)
+                    if imageFormat == .jpeg {
+                        Text(OverlayGuide.mcuGrid.displayName)
+                            .tag(OverlayGuide.mcuGrid)
+                    } else {
+                        Text(OverlayGuide.mcuGrid.displayName + " (JPEG only)")
+                            .foregroundColor(.secondary)
+                            .tag(OverlayGuide.mcuGrid)
+                    }
                 }
                 .pickerStyle(.radioGroup)
+                .onChange(of: activeOverlay) { oldValue, newValue in
+                    // Prevent selection of MCU Grid for non-JPEG images
+                    if newValue == .mcuGrid && imageFormat != .jpeg {
+                        // Reset to previous value or None
+                        activeOverlay = (oldValue != .mcuGrid) ? oldValue : .none
+                    }
+                }
                 
-                // Info text
+                // Info text or warning
                 if activeOverlay != .none {
                     Text(activeOverlay.description)
                         .font(.caption)

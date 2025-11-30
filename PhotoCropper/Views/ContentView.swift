@@ -164,6 +164,7 @@ struct ContentView: View {
                         customWidth: $customWidth,
                         customHeight: $customHeight,
                         imageSize: currentDisplayImage?.pixelSize ?? .zero,
+                        imageFormat: currentDisplayImage?.format,
                         onCenter: {
                             centerCropBox()
                         },
@@ -321,6 +322,12 @@ struct ContentView: View {
         print("📸 loadCurrentBatchImage für: \(currentItem.imageData.url.lastPathComponent)")
         print("   hasCropMetadata: \(currentItem.imageData.hasCropMetadata)")
         print("   cropSettings vorhanden: \(currentItem.cropSettings != nil)")
+        
+        // Reset MCU Grid overlay if not JPEG
+        if currentItem.imageData.format != .jpeg && activeOverlay == .mcuGrid {
+            print("ℹ️ Resetting MCU Grid overlay (not a JPEG)")
+            activeOverlay = .none
+        }
         
         // WICHTIG: Prüfe zuerst gespeicherte Crop-Metadaten, DANN BatchItem cropSettings
         if let cropMeta = currentItem.imageData.cropMetadata {
