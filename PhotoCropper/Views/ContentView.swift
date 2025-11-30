@@ -179,6 +179,10 @@ struct ContentView: View {
                         },
                         onCropBoxChanged: { newBox in
                             updateCropBox(newBox)
+                        },
+                        onCustomRatioChanged: {
+                            // User changed custom ratio in text fields - adjust crop box
+                            adjustCropBoxForCustomRatio()
                         }
                     )
                     .onChange(of: targetRatio) { oldValue, newValue in
@@ -205,24 +209,6 @@ struct ContentView: View {
                         
                         // Crop-Box neu berechnen wenn Zielformat geändert wird
                         updateCropBoxForNewImage()
-                    }
-                    .onChange(of: customWidth) { oldValue, newValue in
-                        // Wenn wir gerade Metadaten laden oder von Drag updaten, nichts tun!
-                        guard !isLoadingFromMetadata && !isUpdatingFromDrag else { return }
-                        
-                        // Bei Custom-Ratio-Änderung: Crop-Box-Größe proportional anpassen
-                        if case .custom = targetRatio {
-                            adjustCropBoxForCustomRatio()
-                        }
-                    }
-                    .onChange(of: customHeight) { oldValue, newValue in
-                        // Wenn wir gerade Metadaten laden oder von Drag updaten, nichts tun!
-                        guard !isLoadingFromMetadata && !isUpdatingFromDrag else { return }
-                        
-                        // Bei Custom-Ratio-Änderung: Crop-Box-Größe proportional anpassen
-                        if case .custom = targetRatio {
-                            adjustCropBoxForCustomRatio()
-                        }
                     }
                     
                     Divider()

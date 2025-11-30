@@ -21,6 +21,7 @@ struct ControlsView: View {
     var onReset: () -> Void
     var onMaximize: () -> Void
     var onCropBoxChanged: (CGRect) -> Void
+    var onCustomRatioChanged: () -> Void  // NEW: Callback when custom ratio text fields change
     
     // Helper for Picker: Simplified enum without associated values
     private enum RatioSelection: String, CaseIterable, Identifiable {
@@ -83,9 +84,17 @@ struct ControlsView: View {
                         Text("Width:")
                         TextField("16", text: $customWidth)
                             .frame(width: 60)
+                            .onSubmit {
+                                // Trigger crop box adjustment when user presses Enter
+                                onCustomRatioChanged()
+                            }
                         Text("Height:")
                         TextField("9", text: $customHeight)
                             .frame(width: 60)
+                            .onSubmit {
+                                // Trigger crop box adjustment when user presses Enter
+                                onCustomRatioChanged()
+                            }
                     }
                     .padding(.leading, 20)
                 }
