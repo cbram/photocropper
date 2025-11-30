@@ -66,7 +66,19 @@ class MetadataService {
         )
     }
     
-    /// Speichert Crop-Metadaten mit exiftool (verlustfrei, keine Bildveränderung!)
+    /// Saves crop metadata to image file using exiftool (lossless!)
+    ///
+    /// - Parameters:
+    ///   - exiftoolPath: Path to the exiftool executable
+    ///   - imageURL: URL to the image file
+    ///   - cropBox: Crop rectangle in pixel coordinates
+    ///   - imageSize: Original image size
+    ///   - targetRatio: Target aspect ratio
+    ///   - mode: Crop mode (MCU-sensitive or standard)
+    ///   - originalRatio: Original aspect ratio as string
+    /// - Returns: Result indicating success or failure
+    ///
+    /// - Note: This method delegates to `MetadataWriter` for actual writing logic
     private static func saveCropMetadataWithExiftool(
         exiftoolPath: String,
         imageURL: URL,
@@ -76,219 +88,18 @@ class MetadataService {
         mode: CropMode,
         originalRatio: String
     ) -> Result<Void, Error> {
-        
-        print("📊 Metadaten-Service (exiftool):")
-        print("  exiftool: \(exiftoolPath)")
-        print("  Image: \(imageURL.lastPathComponent)")
-        print("  Size: \(imageSize.width)x\(imageSize.height)")
-        print("  Crop: \(cropBox)")
-        print("  💡 3-Pass-Strategie:")
-        print("     PASS 1: Lösche alle XMP-crs:Crop*, XMP-dc:Subject und IPTC:Keywords")
-        print("     PASS 2: Schreibe neue Crop-Koordinaten + gefilterte Subject-Tags")
-        print("     PASS 3: Synchronisiere XMP→IPTC und aktualisiere IPTCDigest")
-        print("  📝 Crop-Infos werden gespeichert in:")
-        print("     - XMP-crs:CropTop/Left/Bottom/Right (Lightroom-kompatibel)")
-        print("     - XMP-dc:Subject (7 PhotoCropper-Felder für vollständige Crop-Info)")
-        
-        // Normalisierte Koordinaten berechnen und auf 5 Nachkommastellen runden
-        let normalizedOriginX = roundToDecimalPlaces(cropBox.origin.x / imageSize.width)
-        let normalizedOriginY = roundToDecimalPlaces(cropBox.origin.y / imageSize.height)
-        let normalizedWidth = roundToDecimalPlaces(cropBox.width / imageSize.width)
-        let normalizedHeight = roundToDecimalPlaces(cropBox.height / imageSize.height)
-        
-        let normalizedOrigin = CGPoint(x: normalizedOriginX, y: normalizedOriginY)
-        let normalizedSize = CGSize(width: normalizedWidth, height: normalizedHeight)
-        
-        let cropBottom = roundToDecimalPlaces(normalizedOriginY + normalizedHeight)
-        let cropRight = roundToDecimalPlaces(normalizedOriginX + normalizedWidth)
-        
-        print("  Normalized: origin=(\(normalizedOrigin.x), \(normalizedOrigin.y)) size=(\(normalizedSize.width), \(normalizedSize.height))")
-        
-        // 🔍 STEP 0: Read existing tags and filter out PhotoCropper tags
-        let existingSubjects = MetadataReader.readNonPhotoCropperSubjectTags(
+        let result = MetadataWriter.saveCropMetadata(
             exiftoolPath: exiftoolPath,
-            imageURL: imageURL
-        )
-        let existingKeywords = MetadataReader.readNonPhotoCropperIPTCKeywords(
-            exiftoolPath: exiftoolPath,
-            imageURL: imageURL
+            imageURL: imageURL,
+            cropBox: cropBox,
+            imageSize: imageSize,
+            targetRatio: targetRatio,
+            mode: mode,
+            originalRatio: originalRatio
         )
         
-        if !existingSubjects.isEmpty {
-            print("  📋 Behalte \(existingSubjects.count) existierende Subject-Tags (nicht von PhotoCropper):")
-            for subject in existingSubjects {
-                print("     - \(subject)")
-            }
-        }
-        if !existingKeywords.isEmpty {
-            print("  📋 Behalte \(existingKeywords.count) existierende IPTC Keywords:")
-            for keyword in existingKeywords {
-                print("     - \(keyword)")
-            }
-        }
-        
-        print("  ⚠️ WICHTIG: PhotoCropper-Crop-Infos werden NUR in XMP-dc:Subject gespeichert:")
-        print("     ✓ PhotoCropper:CropMode, TargetRatio, OriginalRatio")
-        print("     ✓ PhotoCropper:CropOriginX, CropOriginY, CropWidth, CropHeight")
-        print("     → Dein Ausleseprogramm sollte XMP-dc:Subject lesen, NICHT IPTC:Keywords!")
-        
-        // 1️⃣ PASS 1: LÖSCHEN - Alle Crop-Tags und Subject-Tags entfernen
-        print("  🧹 PASS 1: Lösche alte Tags (OHNE -n, da sonst CropConstrainToUnitSquare nicht gelöscht wird!)...")
-        
-        var argv1: [UnsafeMutablePointer<CChar>?] = []
-        argv1.append(strdup(exiftoolPath))
-        argv1.append(strdup("-overwrite_original"))
-        // KEIN -n hier! Das "-n" Flag verhindert das Löschen von numerischen Tags wie CropConstrainToUnitSquare!
-        
-        // XMP-crs Crop-Tags löschen
-        argv1.append(strdup("-XMP-crs:CropTop="))
-        argv1.append(strdup("-XMP-crs:CropLeft="))
-        argv1.append(strdup("-XMP-crs:CropBottom="))
-        argv1.append(strdup("-XMP-crs:CropRight="))
-        argv1.append(strdup("-XMP-crs:CropAngle="))
-        argv1.append(strdup("-XMP-crs:CropConstrainToWarp="))
-        argv1.append(strdup("-XMP-crs:CropConstrainToUnitSquare="))
-        argv1.append(strdup("-XMP-crs:HasCrop="))
-        argv1.append(strdup("-XMP-crs:HasSettings="))
-        
-        // ALLE Subject-Tags löschen (wird in Pass 2 neu geschrieben)
-        argv1.append(strdup("-XMP-dc:Subject="))
-        
-        // ALLE IPTC Keywords löschen (um Duplikate zu vermeiden)
-        argv1.append(strdup("-IPTC:Keywords="))
-        
-        argv1.append(strdup(imageURL.path))
-        argv1.append(nil)
-        
-        var pid1: pid_t = 0
-        let envp: [UnsafeMutablePointer<CChar>?] = [
-            strdup("PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"),
-            nil
-        ]
-        
-        let status1 = posix_spawn(&pid1, exiftoolPath, nil, nil, argv1, envp)
-        argv1.forEach { if let ptr = $0 { free(ptr) } }
-        
-        if status1 == 0 {
-            var exitStatus1: Int32 = 0
-            waitpid(pid1, &exitStatus1, 0)
-            let actualExit1 = (exitStatus1 >> 8) & 0xFF
-            
-            if actualExit1 != 0 {
-                print("  ❌ PASS 1 fehlgeschlagen: exit code \(actualExit1)")
-                envp.forEach { if let ptr = $0 { free(ptr) } }
-                return .failure(MetadataServiceError.exiftoolFailed)
-            }
-            print("  ✅ PASS 1 erfolgreich")
-        } else {
-            print("  ❌ PASS 1 posix_spawn failed: \(status1)")
-            envp.forEach { if let ptr = $0 { free(ptr) } }
-            return .failure(MetadataServiceError.exiftoolFailed)
-        }
-        
-        // 2️⃣ PASS 2: SETZEN - Neue Crop-Tags und gefilterte Subject-Tags schreiben
-        print("  📝 PASS 2: Schreibe neue Tags...")
-        
-        var argv2: [UnsafeMutablePointer<CChar>?] = []
-        argv2.append(strdup(exiftoolPath))
-        argv2.append(strdup("-overwrite_original"))
-        argv2.append(strdup("-n"))
-        argv2.append(strdup("-codedcharacterset=utf8"))
-        
-        // Neue XMP-crs Crop-Tags
-        argv2.append(strdup("-XMP-crs:CropTop=\(normalizedOrigin.y)"))
-        argv2.append(strdup("-XMP-crs:CropLeft=\(normalizedOrigin.x)"))
-        argv2.append(strdup("-XMP-crs:CropBottom=\(cropBottom)"))
-        argv2.append(strdup("-XMP-crs:CropRight=\(cropRight)"))
-        
-        // Existierende (nicht-PhotoCropper) Subject-Tags
-        for subject in existingSubjects {
-            argv2.append(strdup("-XMP-dc:Subject+=\(subject)"))
-        }
-        
-        // Neue PhotoCropper Subject-Tags
-        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropMode=\(mode.rawValue)"))
-        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:TargetRatio=\(targetRatio.id)"))
-        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:OriginalRatio=\(originalRatio)"))
-        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginX=\(normalizedOrigin.x)"))
-        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropOriginY=\(normalizedOrigin.y)"))
-        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropWidth=\(normalizedSize.width)"))
-        argv2.append(strdup("-XMP-dc:Subject+=PhotoCropper:CropHeight=\(normalizedSize.height)"))
-        
-        // Existierende (nicht-PhotoCropper) IPTC Keywords wieder hinzufügen
-        if !existingKeywords.isEmpty {
-            for keyword in existingKeywords {
-                argv2.append(strdup("-IPTC:Keywords+=\(keyword)"))
-            }
-        }
-        
-        argv2.append(strdup(imageURL.path))
-        argv2.append(nil)
-        
-        var pid2: pid_t = 0
-        
-        let status2 = posix_spawn(&pid2, exiftoolPath, nil, nil, argv2, envp)
-        argv2.forEach { if let ptr = $0 { free(ptr) } }
-        
-        if status2 == 0 {
-            var exitStatus2: Int32 = 0
-            waitpid(pid2, &exitStatus2, 0)
-            let actualExit2 = (exitStatus2 >> 8) & 0xFF
-            
-            if actualExit2 != 0 {
-                print("  ❌ PASS 2 fehlgeschlagen: exit code \(actualExit2)")
-                envp.forEach { if let ptr = $0 { free(ptr) } }
-                return .failure(MetadataServiceError.exiftoolFailed)
-            }
-            print("  ✅ PASS 2 erfolgreich")
-        } else {
-            print("  ❌ PASS 2 posix_spawn failed: \(status2)")
-            envp.forEach { if let ptr = $0 { free(ptr) } }
-            return .failure(MetadataServiceError.exiftoolFailed)
-        }
-        
-        // 3️⃣ PASS 3: SYNCHRONISATION - XMP→IPTC sync und IPTCDigest aktualisieren
-        print("  🔄 PASS 3: Synchronisiere XMP→IPTC...")
-        
-        var argv3: [UnsafeMutablePointer<CChar>?] = []
-        argv3.append(strdup(exiftoolPath))
-        argv3.append(strdup("-overwrite_original"))
-        argv3.append(strdup("-codedcharacterset=utf8"))
-        
-        // Synchronisiere XMP-dc:Subject → IPTC:Keywords
-        // Dies ist der exakte Befehl, der beim User funktioniert hat!
-        argv3.append(strdup("-IPTC:Keywords<XMP-dc:Subject"))
-        
-        argv3.append(strdup(imageURL.path))
-        argv3.append(nil)
-        
-        var pid3: pid_t = 0
-        
-        let status3 = posix_spawn(&pid3, exiftoolPath, nil, nil, argv3, envp)
-        argv3.forEach { if let ptr = $0 { free(ptr) } }
-        
-        if status3 == 0 {
-            var exitStatus3: Int32 = 0
-            waitpid(pid3, &exitStatus3, 0)
-            let actualExit3 = (exitStatus3 >> 8) & 0xFF
-            
-            if actualExit3 == 0 {
-                print("  ✅ PASS 3 erfolgreich - XMP↔IPTC synchronisiert, IPTCDigest aktualisiert!")
-                print("  ✅ Metadaten vollständig geschrieben ohne Bildveränderung!")
-                envp.forEach { if let ptr = $0 { free(ptr) } }
-                return .success(())
-            } else {
-                print("  ❌ PASS 3 fehlgeschlagen: exit code \(actualExit3)")
-                print("  ⚠️ Metadaten wurden geschrieben, aber Synchronisation fehlgeschlagen")
-                envp.forEach { if let ptr = $0 { free(ptr) } }
-                return .failure(MetadataServiceError.exiftoolFailed)
-            }
-        } else {
-            print("  ❌ PASS 3 posix_spawn failed: \(status3)")
-            print("  ⚠️ Metadaten wurden geschrieben, aber Synchronisation fehlgeschlagen")
-            envp.forEach { if let ptr = $0 { free(ptr) } }
-            return .failure(MetadataServiceError.exiftoolFailed)
-        }
+        // Convert MetadataWriterError to MetadataServiceError
+        return result.mapError { $0 as Error }
     }
     
     /// Fallback: Speichert Crop-Metadaten mit ImageIO (kann Bild verändern!)
