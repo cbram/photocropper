@@ -207,18 +207,18 @@ struct ContentView: View {
                         // Wenn wir gerade Metadaten laden, nichts tun!
                         guard !isLoadingFromMetadata else { return }
                         
-                        // Auch bei Custom-Ratio-Änderung neu berechnen
+                        // Bei Custom-Ratio-Änderung: Crop-Box-Größe proportional anpassen
                         if case .custom = targetRatio {
-                            updateCropBoxForNewImage()
+                            adjustCropBoxForCustomRatio()
                         }
                     }
                     .onChange(of: customHeight) { oldValue, newValue in
                         // Wenn wir gerade Metadaten laden, nichts tun!
                         guard !isLoadingFromMetadata else { return }
                         
-                        // Auch bei Custom-Ratio-Änderung neu berechnen
+                        // Bei Custom-Ratio-Änderung: Crop-Box-Größe proportional anpassen
                         if case .custom = targetRatio {
-                            updateCropBoxForNewImage()
+                            adjustCropBoxForCustomRatio()
                         }
                     }
                     
@@ -443,6 +443,45 @@ struct ContentView: View {
                 enabled: true
             )
         }
+    }
+    
+    /// Adjusts crop box size proportionally when custom ratio changes
+    /// This maintains the current position and relative size instead of maximizing
+    private func adjustCropBoxForCustomRatio() {
+        guard let displayImage = currentDisplayImage else { return }
+        guard case .custom(let w, let h) = effectiveTargetRatio else { return }
+        guard w > 0 && h > 0 else { return }
+        
+        let newRatio = Double(w) / Double(h)
+        let currentRatio = cropBox.width / cropBox.height
+        
+        var newBox = cropBox
+        
+        // Adjust size based on which dimension should stay closer to current
+        if abs(newRatio - currentRatio) < 0.01 {
+            // Ratio barely changed, keep box as is
+            return
+        }
+        
+        // Keep the smaller dimension and calculate the other
+        if newRatio > currentRatio {
+            // New ratio is wider - keep height, adjust width
+            newBox.size.width = newBox.size.height * CGFloat(newRatio)
+        } else {
+            // New ratio is taller - keep width, adjust height
+            newBox.size.height = newBox.size.width / CGFloat(newRatio)
+        }
+        
+        // Validate and apply
+        newBox = CropEngine.validateCropBox(newBox, imageSize: displayImage.pixelSize)
+        
+        // If validation had to shrink the box significantly, center it
+        let sizeRatio = (newBox.width * newBox.height) / (cropBox.width * cropBox.height)
+        if sizeRatio < 0.5 {
+            newBox = CropEngine.centerCropBox(cropBox: newBox, imageSize: displayImage.pixelSize)
+        }
+        
+        updateCropBox(newBox)
     }
     
     private func updateCropBox(_ newBox: CGRect) {
