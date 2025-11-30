@@ -26,6 +26,9 @@ struct ContentView: View {
     // Flag um onChange-Handler beim Laden von Metadaten zu unterdrücken
     @State private var isLoadingFromMetadata: Bool = false
     
+    // Flag um onChange-Handler während Drag-Operationen zu unterdrücken
+    @State private var isUpdatingFromDrag: Bool = false
+    
     // Computed property für Custom-Ratio
     private var effectiveTargetRatio: AspectRatio {
         if case .custom = targetRatio {
@@ -204,8 +207,8 @@ struct ContentView: View {
                         updateCropBoxForNewImage()
                     }
                     .onChange(of: customWidth) { oldValue, newValue in
-                        // Wenn wir gerade Metadaten laden, nichts tun!
-                        guard !isLoadingFromMetadata else { return }
+                        // Wenn wir gerade Metadaten laden oder von Drag updaten, nichts tun!
+                        guard !isLoadingFromMetadata && !isUpdatingFromDrag else { return }
                         
                         // Bei Custom-Ratio-Änderung: Crop-Box-Größe proportional anpassen
                         if case .custom = targetRatio {
@@ -213,8 +216,8 @@ struct ContentView: View {
                         }
                     }
                     .onChange(of: customHeight) { oldValue, newValue in
-                        // Wenn wir gerade Metadaten laden, nichts tun!
-                        guard !isLoadingFromMetadata else { return }
+                        // Wenn wir gerade Metadaten laden oder von Drag updaten, nichts tun!
+                        guard !isLoadingFromMetadata && !isUpdatingFromDrag else { return }
                         
                         // Bei Custom-Ratio-Änderung: Crop-Box-Größe proportional anpassen
                         if case .custom = targetRatio {
@@ -506,10 +509,16 @@ struct ContentView: View {
         cropBox = updatedBox
         
         // Wenn Custom-Modus: customWidth und customHeight aktualisieren basierend auf tatsächlicher CropBox-Größe
+        // Set flag to prevent onChange handlers from firing during this update
         if case .custom = targetRatio {
+            isUpdatingFromDrag = true
             let ratio = calculateImageAspectRatio(size: updatedBox.size)
             customWidth = String(ratio.width)
             customHeight = String(ratio.height)
+            // Reset flag after a short delay to allow all updates to complete
+            DispatchQueue.main.async {
+                self.isUpdatingFromDrag = false
+            }
         }
         
         // Settings im BatchManager speichern
