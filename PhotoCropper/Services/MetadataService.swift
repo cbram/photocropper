@@ -31,71 +31,8 @@ class MetadataService {
         return formatted
     }
     
-    /// Liest existierende Subject-Tags aus und filtert PhotoCropper-Tags raus
-    private static func readNonPhotoCropperSubjectTags(exiftoolPath: String, imageURL: URL) -> [String] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: exiftoolPath)
-        process.arguments = ["-XMP-dc:Subject", "-s3", imageURL.path]
-        
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else {
-                return []
-            }
-            
-            // exiftool gibt Subject-Tags zeilenweise aus oder komma-separiert
-            let subjects = output.components(separatedBy: .newlines)
-                .flatMap { $0.components(separatedBy: ",") }
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty && !$0.hasPrefix("PhotoCropper:") }
-            
-            return subjects
-        } catch {
-            print("⚠️ Fehler beim Lesen der Subject-Tags: \(error)")
-            return []
-        }
-    }
     
-    /// Liest existierende IPTC Keywords aus und filtert PhotoCropper-Keywords raus
-    private static func readNonPhotoCropperIPTCKeywords(exiftoolPath: String, imageURL: URL) -> [String] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: exiftoolPath)
-        process.arguments = ["-IPTC:Keywords", "-s3", imageURL.path]
-        
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else {
-                return []
-            }
-            
-            // exiftool gibt Keywords zeilenweise aus oder komma-separiert
-            let keywords = output.components(separatedBy: .newlines)
-                .flatMap { $0.components(separatedBy: ",") }
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty && !$0.hasPrefix("CropMode:") && !$0.hasPrefix("TargetRatio:") && !$0.hasPrefix("OriginalRatio:") }
-            
-            return keywords
-        } catch {
-            print("⚠️ Fehler beim Lesen der IPTC Keywords: \(error)")
-            return []
-        }
-    }
-    
-    /// Speichert Crop-Metadaten in Bild-Datei mit exiftool (verlustfrei!)
+    /// Saves crop metadata to image file using exiftool (lossless!)
     static func saveCropMetadata(
         imageURL: URL,
         cropBox: CGRect,
@@ -105,15 +42,9 @@ class MetadataService {
         originalRatio: String
     ) -> Result<Void, Error> {
         
-        // Prüfe ob exiftool verfügbar ist
-        let exiftoolPaths = [
-            "/opt/homebrew/bin/exiftool",
-            "/usr/local/bin/exiftool",
-            "/usr/bin/exiftool"
-        ]
-        
-        guard let exiftoolPath = exiftoolPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
-            print("⚠️ exiftool nicht gefunden - Fallback zu ImageIO")
+        // Check if exiftool is available
+        guard let exiftoolPath = ExiftoolPathResolver.findExiftoolPath() else {
+            print("⚠️ exiftool not found - falling back to ImageIO")
             return saveCropMetadataWithImageIO(
                 imageURL: imageURL,
                 cropBox: cropBox,
@@ -173,9 +104,15 @@ class MetadataService {
         
         print("  Normalized: origin=(\(normalizedOrigin.x), \(normalizedOrigin.y)) size=(\(normalizedSize.width), \(normalizedSize.height))")
         
-        // 🔍 SCHRITT 0: Lese bestehende Tags aus und filtere PhotoCropper-Tags raus
-        let existingSubjects = readNonPhotoCropperSubjectTags(exiftoolPath: exiftoolPath, imageURL: imageURL)
-        let existingKeywords = readNonPhotoCropperIPTCKeywords(exiftoolPath: exiftoolPath, imageURL: imageURL)
+        // 🔍 STEP 0: Read existing tags and filter out PhotoCropper tags
+        let existingSubjects = MetadataReader.readNonPhotoCropperSubjectTags(
+            exiftoolPath: exiftoolPath,
+            imageURL: imageURL
+        )
+        let existingKeywords = MetadataReader.readNonPhotoCropperIPTCKeywords(
+            exiftoolPath: exiftoolPath,
+            imageURL: imageURL
+        )
         
         if !existingSubjects.isEmpty {
             print("  📋 Behalte \(existingSubjects.count) existierende Subject-Tags (nicht von PhotoCropper):")
@@ -489,140 +426,14 @@ class MetadataService {
         }
     }
     
-    /// Liest PhotoCropper-Tags aus XMP-dc:Subject mit exiftool
-    private static func readPhotoCropperTagsWithExiftool(exiftoolPath: String, imageURL: URL) -> [String: String]? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: exiftoolPath)
-        process.arguments = ["-XMP-dc:Subject", "-s3", imageURL.path]
-        
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        
-        do {
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else {
-                return nil
-            }
-            
-            print("🔍 Raw exiftool output für XMP-dc:Subject:")
-            print("   \(output)")
-            
-            // Parse PhotoCropper-Tags aus Subject
-            // Format kann sein:
-            // 1. Zeilen-separiert: jeder Tag in eigener Zeile
-            // 2. Komma-separiert: alle Tags in einer Zeile mit ", " getrennt
-            var cropTags: [String: String] = [:]
-            
-            // Zuerst versuchen: Komma-getrennt (häufigster Fall)
-            let allText = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            let subjectItems = allText.components(separatedBy: ", ")
-                .flatMap { $0.components(separatedBy: ",") }  // Auch ohne Leerzeichen
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { $0.hasPrefix("PhotoCropper:") }
-            
-            print("   Gefundene PhotoCropper-Tags: \(subjectItems.count)")
-            
-            for subject in subjectItems {
-                let withoutPrefix = subject.dropFirst("PhotoCropper:".count)
-                let parts = withoutPrefix.components(separatedBy: "=")
-                if parts.count == 2 {
-                    let key = parts[0].trimmingCharacters(in: .whitespaces)
-                    let value = parts[1].trimmingCharacters(in: .whitespaces)
-                    cropTags[key] = value
-                    print("   ✓ \(key) = \(value)")
-                }
-            }
-            
-            return cropTags.isEmpty ? nil : cropTags
-        } catch {
-            print("⚠️ Fehler beim Lesen der PhotoCropper-Tags: \(error)")
-            return nil
-        }
-    }
-    
-    /// Liest Crop-Metadaten aus Bild-Datei
+    /// Reads crop metadata from image file
+    ///
+    /// - Parameter imageURL: URL to the image file
+    /// - Returns: `CropMetadata` if found, otherwise `nil`
+    ///
+    /// - Note: This method delegates to `MetadataReader` for actual reading logic
     static func readCropMetadata(imageURL: URL) -> CropMetadata? {
-        // Prüfe ob exiftool verfügbar ist für besseres Auslesen
-        let exiftoolPaths = [
-            "/opt/homebrew/bin/exiftool",
-            "/usr/local/bin/exiftool",
-            "/usr/bin/exiftool"
-        ]
-        
-        var cropTags: [String: String]?
-        if let exiftoolPath = exiftoolPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) {
-            cropTags = readPhotoCropperTagsWithExiftool(exiftoolPath: exiftoolPath, imageURL: imageURL)
-        }
-        
-        // Wenn PhotoCropper-Tags gefunden wurden, verwende diese
-        if let tags = cropTags,
-           let cropOriginX = tags["CropOriginX"].flatMap(Double.init),
-           let cropOriginY = tags["CropOriginY"].flatMap(Double.init),
-           let cropWidth = tags["CropWidth"].flatMap(Double.init),
-           let cropHeight = tags["CropHeight"].flatMap(Double.init) {
-            
-            let origin = CGPoint(x: cropOriginX, y: cropOriginY)
-            let size = CGSize(width: cropWidth, height: cropHeight)
-            
-            let cropModeString = tags["CropMode"] ?? CropMode.standard.rawValue
-            let mode = CropMode(rawValue: cropModeString) ?? .standard
-            let originalRatio = tags["OriginalRatio"] ?? "unknown"
-            let targetRatioStr = tags["TargetRatio"] ?? "unknown"
-            
-            print("📖 PhotoCropper Crop-Metadaten gefunden:")
-            print("   Origin: (\(origin.x), \(origin.y))")
-            print("   Size: (\(size.width), \(size.height))")
-            print("   Mode: \(mode.rawValue)")
-            print("   Target Ratio: \(targetRatioStr)")
-            
-            return CropMetadata(
-                origin: origin,
-                size: size,
-                mode: mode,
-                originalRatio: originalRatio,
-                targetRatio: targetRatioStr
-            )
-        }
-        
-        // Fallback: Versuche Standard EXIF-Tags zu lesen
-        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
-            return nil
-        }
-        
-        guard let exifDict = properties[kCGImagePropertyExifDictionary as String] as? [String: Any],
-              let originArray = exifDict["DefaultCropOrigin"] as? [Double],
-              let sizeArray = exifDict["DefaultCropSize"] as? [Double],
-              originArray.count == 2,
-              sizeArray.count == 2 else {
-            return nil
-        }
-        
-        let origin = CGPoint(x: originArray[0], y: originArray[1])
-        let size = CGSize(width: sizeArray[0], height: sizeArray[1])
-        
-        // Custom Tags aus XMP lesen
-        let xmpDict = properties[kCGImagePropertyIPTCDictionary as String] as? [String: Any] ?? [:]
-        let cropModeString = xmpDict[EXIFTags.Custom.cropMode] as? String ?? CropMode.standard.rawValue
-        let mode = CropMode(rawValue: cropModeString) ?? .standard
-        let originalRatio = xmpDict[EXIFTags.Custom.originalRatio] as? String ?? "unknown"
-        let targetRatioStr = xmpDict[EXIFTags.Custom.targetRatio] as? String ?? "unknown"
-        
-        print("📖 Standard EXIF Crop-Metadaten gefunden:")
-        print("   Origin: (\(origin.x), \(origin.y))")
-        print("   Size: (\(size.width), \(size.height))")
-        
-        return CropMetadata(
-            origin: origin,
-            size: size,
-            mode: mode,
-            originalRatio: originalRatio,
-            targetRatio: targetRatioStr
-        )
+        return MetadataReader.readCropMetadata(imageURL: imageURL)
     }
     
     /// Erstellt XMP-XML-String für Metadaten
