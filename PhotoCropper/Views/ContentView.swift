@@ -25,6 +25,9 @@ struct ContentView: View {
     @State private var customHeight: String = "9"
     @State private var showBatchExport: Bool = false
     
+    // Flag um onChange-Handler beim Laden von Metadaten zu unterdrücken
+    @State private var isLoadingFromMetadata: Bool = false
+    
     // Computed property für Custom-Ratio
     private var effectiveTargetRatio: AspectRatio {
         if case .custom = targetRatio {
@@ -42,38 +45,48 @@ struct ContentView: View {
                 .onDrop(of: [.fileURL], delegate: BatchDropDelegate(batchManager: batchManager, onDrop: { urls in
                     loadBatchImages(from: urls)
                 }))
+                .frame(minWidth: 200, idealWidth: 250, maxWidth: 300)
             
             // Canvas-Bereich
-            VStack {
-                // Top Navigation
-                HStack {
+            VStack(spacing: 0) {
+                // Top Navigation - Kompakt für kleinere Bildschirme
+                HStack(spacing: 12) {
                     Text("PhotoCropper")
                         .font(.title2)
                         .fontWeight(.bold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     
-                    Spacer()
+                    Spacer(minLength: 8)
                     
+                    // Kompakte Buttons
                     Button(action: {
                         batchManager.markCurrentAsReadyAndNext()
                     }) {
-                        HStack {
+                        HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle")
-                            Text("Fertig & Weiter")
+                            Text("Fertig")
+                                .lineLimit(1)
                         }
                     }
                     .disabled(batchManager.currentImage == nil)
+                    .help("Fertig & Weiter (Enter)")
                     
                     Button(action: {
                         showBatchExport = true
                     }) {
-                        HStack {
+                        HStack(spacing: 4) {
                             Image(systemName: "square.and.arrow.down.on.square")
-                            Text("Alle speichern")
+                            Text("Speichern")
+                                .lineLimit(1)
                         }
                     }
                     .disabled(!batchManager.allReady)
+                    .help("Alle speichern")
                 }
-                .padding()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(NSColor.controlBackgroundColor))
                 
                 // Canvas
                 if let displayImageData = currentDisplayImage {
@@ -104,6 +117,7 @@ struct ContentView: View {
                             switchToCustomRatio()
                         }
                     )
+                    .frame(minWidth: 300, minHeight: 300)
                     .background(Color.black)
                     .focused($canvasHasFocus)
                     .onAppear {
@@ -141,66 +155,82 @@ struct ContentView: View {
                 }
             }
             
-            // Controls-Panel (30%)
-            VStack {
-                ControlsView(
-                    targetRatio: $targetRatio,
-                    cropMode: $cropMode,
-                    showMCUGrid: $showMCUGrid,
-                    compositionOverlay: $compositionOverlay,
-                    cropBox: $cropBox,
-                    customWidth: $customWidth,
-                    customHeight: $customHeight,
-                    imageSize: currentDisplayImage?.pixelSize ?? .zero,
-                    onCenter: {
-                        centerCropBox()
-                    },
-                    onReset: {
-                        resetCropBox()
-                    },
-                    onMaximize: {
-                        maximizeCropBox()
+            // Controls-Panel - Scrollbar bei Platzmangel
+            ScrollView {
+                VStack(spacing: 0) {
+                    ControlsView(
+                        targetRatio: $targetRatio,
+                        cropMode: $cropMode,
+                        showMCUGrid: $showMCUGrid,
+                        compositionOverlay: $compositionOverlay,
+                        cropBox: $cropBox,
+                        customWidth: $customWidth,
+                        customHeight: $customHeight,
+                        imageSize: currentDisplayImage?.pixelSize ?? .zero,
+                        onCenter: {
+                            centerCropBox()
+                        },
+                        onReset: {
+                            resetCropBox()
+                        },
+                        onMaximize: {
+                            maximizeCropBox()
+                        },
+                        onCropBoxChanged: { newBox in
+                            updateCropBox(newBox)
+                        }
+                    )
+                    .onChange(of: targetRatio) { oldValue, newValue in
+                        // Wenn wir gerade Metadaten laden, nichts tun!
+                        guard !isLoadingFromMetadata else {
+                            print("   ⏭️ onChange(targetRatio) übersprungen - laden von Metadaten")
+                            return
+                        }
+                        
+                        // Wenn auf Custom gewechselt wird, übernehme vorheriges Ratio
+                        if case .custom = newValue {
+                            // Nur wenn vorher NICHT custom war
+                            switch oldValue {
+                            case .ratio16_9:
+                                customWidth = "16"
+                                customHeight = "9"
+                            case .ratio1_1:
+                                customWidth = "1"
+                                customHeight = "1"
+                            case .custom:
+                                break // Bereits custom, nichts tun
+                            }
+                        }
+                        
+                        // Crop-Box neu berechnen wenn Zielformat geändert wird
+                        updateCropBoxForNewImage()
                     }
-                )
-                .onChange(of: targetRatio) { oldValue, newValue in
-                    // Wenn auf Custom gewechselt wird, übernehme vorheriges Ratio
-                    if case .custom = newValue {
-                        // Nur wenn vorher NICHT custom war
-                        switch oldValue {
-                        case .ratio16_9:
-                            customWidth = "16"
-                            customHeight = "9"
-                        case .ratio1_1:
-                            customWidth = "1"
-                            customHeight = "1"
-                        case .custom:
-                            break // Bereits custom, nichts tun
+                    .onChange(of: customWidth) { oldValue, newValue in
+                        // Wenn wir gerade Metadaten laden, nichts tun!
+                        guard !isLoadingFromMetadata else { return }
+                        
+                        // Auch bei Custom-Ratio-Änderung neu berechnen
+                        if case .custom = targetRatio {
+                            updateCropBoxForNewImage()
+                        }
+                    }
+                    .onChange(of: customHeight) { oldValue, newValue in
+                        // Wenn wir gerade Metadaten laden, nichts tun!
+                        guard !isLoadingFromMetadata else { return }
+                        
+                        // Auch bei Custom-Ratio-Änderung neu berechnen
+                        if case .custom = targetRatio {
+                            updateCropBoxForNewImage()
                         }
                     }
                     
-                    // Crop-Box neu berechnen wenn Zielformat geändert wird
-                    updateCropBoxForNewImage()
+                    Divider()
+                        .padding(.vertical, 8)
+                    
+                    InfoPanel(imageData: currentDisplayImage)
                 }
-                .onChange(of: customWidth) { oldValue, newValue in
-                    // Auch bei Custom-Ratio-Änderung neu berechnen
-                    if case .custom = targetRatio {
-                        updateCropBoxForNewImage()
-                    }
-                }
-                .onChange(of: customHeight) { oldValue, newValue in
-                    // Auch bei Custom-Ratio-Änderung neu berechnen
-                    if case .custom = targetRatio {
-                        updateCropBoxForNewImage()
-                    }
-                }
-                
-                Divider()
-                
-                InfoPanel(imageData: currentDisplayImage)
-                
-                Spacer()
             }
-            .frame(width: 300)
+            .frame(minWidth: 250, idealWidth: 300, maxWidth: 350)
         }
         .sheet(isPresented: $showBatchExport) {
             BatchExportView(
@@ -291,8 +321,70 @@ struct ContentView: View {
     private func loadCurrentBatchImage() {
         guard let currentItem = batchManager.currentImage else { return }
         
-        // Lade Crop-Settings aus BatchItem
-        if let settings = currentItem.cropSettings {
+        print("📸 loadCurrentBatchImage für: \(currentItem.imageData.url.lastPathComponent)")
+        print("   hasCropMetadata: \(currentItem.imageData.hasCropMetadata)")
+        print("   cropSettings vorhanden: \(currentItem.cropSettings != nil)")
+        
+        // WICHTIG: Prüfe zuerst gespeicherte Crop-Metadaten, DANN BatchItem cropSettings
+        if let cropMeta = currentItem.imageData.cropMetadata {
+            // Gespeicherte Crop-Metadaten aus Bild laden (hat Priorität!)
+            print("📖 Lade gespeicherte Crop-Metadaten aus EXIF")
+            
+            let imageSize = currentItem.imageData.pixelSize
+            
+            // Konvertiere normalisierte Koordinaten zurück zu Pixeln
+            let pixelCropBox = CGRect(
+                x: cropMeta.originX * imageSize.width,
+                y: cropMeta.originY * imageSize.height,
+                width: cropMeta.width * imageSize.width,
+                height: cropMeta.height * imageSize.height
+            )
+            
+            // Crop-Modus übernehmen
+            cropMode = CropMode(rawValue: cropMeta.cropMode) ?? .standard
+            
+            // Target Ratio parsen und setzen - WICHTIG: Erst customWidth/Height, DANN targetRatio!
+            if let parsedRatio = parseAspectRatioFromString(cropMeta.targetRatio) {
+                // Flag setzen um onChange-Handler zu unterdrücken
+                isLoadingFromMetadata = true
+                
+                // Bei Custom Ratio: ZUERST die Textfelder setzen
+                if case .custom(let w, let h) = parsedRatio {
+                    customWidth = String(w)
+                    customHeight = String(h)
+                    print("   → Custom Ratio erkannt: \(w):\(h)")
+                }
+                
+                // DANN erst das targetRatio setzen
+                targetRatio = parsedRatio
+                
+                // WICHTIG: Crop-Box setzen
+                cropBox = pixelCropBox
+                
+                print("   → Crop-Box: \(pixelCropBox)")
+                print("   → Mode: \(cropMode.rawValue)")
+                print("   → Target Ratio: \(cropMeta.targetRatio) → \(parsedRatio.id)")
+                print("   → customWidth: \(customWidth), customHeight: \(customHeight)")
+                
+                // Flag mit kurzer Verzögerung zurücksetzen, damit alle Updates durchlaufen
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.isLoadingFromMetadata = false
+                    print("   ✅ Metadaten-Laden abgeschlossen")
+                }
+            } else {
+                print("   ⚠️ Konnte Target Ratio nicht parsen: \(cropMeta.targetRatio)")
+            }
+            
+            // Auch die CropSettings im BatchItem aktualisieren
+            currentItem.cropSettings = CropSettings(
+                cropBox: pixelCropBox,
+                targetRatio: targetRatio,
+                mode: cropMode,
+                originalRatio: currentItem.imageData.aspectRatioString
+            )
+        } else if let settings = currentItem.cropSettings {
+            // Lade Crop-Settings aus BatchItem (nur wenn keine Metadaten vorhanden)
+            print("📋 Lade Crop-Settings aus BatchItem")
             cropBox = settings.cropBox
             targetRatio = settings.targetRatio
             cropMode = settings.mode
@@ -304,8 +396,27 @@ struct ContentView: View {
             }
         } else {
             // Initiale Crop-Box berechnen
+            print("🆕 Keine gespeicherten Daten - berechne initiale Crop-Box")
             updateCropBoxForNewImage()
         }
+    }
+    
+    /// Parst AspectRatio aus String (z.B. "16:9", "1:1", "3:2")
+    private func parseAspectRatioFromString(_ ratioString: String) -> AspectRatio? {
+        if ratioString == "16:9" {
+            return .ratio16_9
+        } else if ratioString == "1:1" {
+            return .ratio1_1
+        } else {
+            // Parse any "width:height" format as custom
+            let parts = ratioString.components(separatedBy: ":")
+            if parts.count == 2,
+               let width = Int(parts[0]),
+               let height = Int(parts[1]) {
+                return .custom(width: width, height: height)
+            }
+        }
+        return nil
     }
     
     private func updateCropBoxForNewImage() {
@@ -350,6 +461,13 @@ struct ContentView: View {
         }
         
         cropBox = updatedBox
+        
+        // Wenn Custom-Modus: customWidth und customHeight aktualisieren basierend auf tatsächlicher CropBox-Größe
+        if case .custom = targetRatio {
+            let ratio = calculateImageAspectRatio(size: updatedBox.size)
+            customWidth = String(ratio.width)
+            customHeight = String(ratio.height)
+        }
         
         // Settings im BatchManager speichern
         if let currentItem = batchManager.currentImage {

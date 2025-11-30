@@ -109,7 +109,7 @@ struct BatchImageListView: View {
             .padding(8)
             .background(Color.gray.opacity(0.05))
         }
-        .frame(width: 250)
+        .frame(minWidth: 200, idealWidth: 250)
         .background(Color(NSColor.controlBackgroundColor))
     }
 }
@@ -131,23 +131,39 @@ struct BatchImageListItemView: View {
                 .font(.caption)
                 .frame(width: 16)
             
-            // Thumbnail
-            if let thumbnail = item.thumbnail {
-                Image(nsImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 60, height: 60)
-                    .clipped()
-                    .cornerRadius(4)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 60, height: 60)
-                    .cornerRadius(4)
-                    .overlay(
-                        ProgressView()
-                            .scaleEffect(0.7)
-                    )
+            // Thumbnail mit Badge
+            ZStack(alignment: .topTrailing) {
+                if let thumbnail = item.thumbnail {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 60, height: 60)
+                        .clipped()
+                        .cornerRadius(4)
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(4)
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.7)
+                        )
+                }
+                
+                // Badge für gespeicherte Crop-Daten auf Thumbnail - DEUTLICH SICHTBAR
+                if item.imageData.hasCropMetadata {
+                    ZStack {
+                        Circle()
+                            .fill(Color.blue)
+                            .frame(width: 20, height: 20)
+                        
+                        Image(systemName: "crop")
+                            .foregroundColor(.white)
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .offset(x: -4, y: 4)
+                }
             }
             
             // Info
@@ -165,10 +181,19 @@ struct BatchImageListItemView: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
                 
+                // Zeige gespeicherte Crop-Info oder neue Crop-Einstellungen
                 if let ratio = item.cropSettings?.targetRatio {
                     Text("→ \(ratio.id)")
                         .font(.caption2)
                         .foregroundColor(.blue)
+                } else if item.imageData.hasCropMetadata {
+                    HStack(spacing: 2) {
+                        Image(systemName: "crop")
+                            .font(.system(size: 8))
+                        Text("Gespeichert")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.blue)
                 }
             }
             

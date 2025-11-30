@@ -49,6 +49,12 @@ class ImageData: ObservableObject {
     /// MCU-Größe (falls JPEG)
     @Published var mcuSize: CGSize?
     
+    /// Gespeicherte Crop-Metadaten (falls vorhanden)
+    @Published var cropMetadata: CropMetadata?
+    
+    /// Flag ob Bild bereits Crop-Metadaten hat
+    @Published var hasCropMetadata: Bool = false
+    
     /// Metadaten-Dictionary
     var metadata: [String: Any] = [:]
     
@@ -101,6 +107,13 @@ class ImageData: ObservableObject {
         image = NSImage(cgImage: imageRef, size: displaySize)
         
         // MCU-Größe für JPEG bestimmen (wird später von JPEGService geladen)
+        
+        // Crop-Metadaten auslesen (falls vorhanden)
+        if let cropMeta = MetadataService.readCropMetadata(imageURL: url) {
+            cropMetadata = cropMeta
+            hasCropMetadata = true
+            print("✅ Bild hat bereits Crop-Metadaten: \(url.lastPathComponent)")
+        }
     }
     
     /// Bestimmt das Bildformat aus UTI

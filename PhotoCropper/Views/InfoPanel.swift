@@ -29,6 +29,34 @@ struct InfoPanel: View {
                     if let mcuSize = imageData.mcuSize {
                         InfoRow(label: "MCU-Größe:", value: "\(Int(mcuSize.width))x\(Int(mcuSize.height))")
                     }
+                    
+                    // Crop-Metadaten Anzeige
+                    if imageData.hasCropMetadata {
+                        Divider()
+                            .padding(.vertical, 4)
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "crop")
+                                .foregroundColor(.blue)
+                                .font(.caption)
+                            Text("Crop-Daten vorhanden")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        if let cropMeta = imageData.cropMetadata {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Mode: \(cropMeta.cropMode)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                Text("Ratio: \(cropMeta.targetRatio)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.leading, 20)
+                        }
+                    }
                 }
             } else {
                 Text("Kein Bild geladen")

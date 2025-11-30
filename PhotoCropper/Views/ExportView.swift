@@ -26,6 +26,30 @@ struct ExportView: View {
     enum ExportResult {
         case success(URL, metadataSaved: Bool, cropData: String)
         case failure(String)
+        case noChanges  // Neue Option: Keine Änderungen
+    }
+    
+    // Prüft ob die aktuellen Crop-Settings mit den gespeicherten Metadaten übereinstimmen
+    private var cropDataUnchanged: Bool {
+        guard let imageData = imageData,
+              let cropSettings = cropSettings,
+              let existingMetadata = imageData.cropMetadata else {
+            return false
+        }
+        
+        let imageSize = imageData.pixelSize
+        let normalized = cropSettings.normalizedCoordinates(for: imageSize)
+        
+        // Vergleiche mit einer kleinen Toleranz (0.0001) wegen Float-Genauigkeit
+        let tolerance = 0.0001
+        let originMatches = abs(normalized.origin.x - existingMetadata.originX) < tolerance &&
+                           abs(normalized.origin.y - existingMetadata.originY) < tolerance
+        let sizeMatches = abs(normalized.size.width - existingMetadata.width) < tolerance &&
+                         abs(normalized.size.height - existingMetadata.height) < tolerance
+        let modeMatches = cropSettings.mode.rawValue == existingMetadata.cropMode
+        let ratioMatches = cropSettings.targetRatio.id == existingMetadata.targetRatio
+        
+        return originMatches && sizeMatches && modeMatches && ratioMatches
     }
     
     var body: some View {
@@ -35,6 +59,26 @@ struct ExportView: View {
                 .foregroundColor(.secondary)
             
             if imageData != nil {
+                // Warnung wenn keine Änderungen
+                if cropDataUnchanged && saveCropMetadata && onlyMetadata {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(.title3)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Keine Änderungen")
+                                .font(.headline)
+                                .foregroundColor(.blue)
+                            Text("Die Crop-Daten sind bereits identisch mit den gespeicherten Metadaten.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                
                 // Dateiname
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Dateiname:")
@@ -127,6 +171,29 @@ struct ExportView: View {
                 // Ergebnis-Anzeige (kompakt)
                 if let result = exportResult {
                     switch result {
+                    case .noChanges:
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.title3)
+                                Text("Keine Änderungen")
+                                    .foregroundColor(.blue)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            Text("Die Crop-Daten sind bereits identisch mit den gespeicherten Metadaten.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Text("Es wurde keine Datei geschrieben.")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(10)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                        
                     case .success(let url, let metadataSaved, let cropData):
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
@@ -251,14 +318,26 @@ struct ExportView: View {
                                 ProgressView()
                                     .scaleEffect(0.8)
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else if cropDataUnchanged && saveCropMetadata && onlyMetadata {
+                                Image(systemName: "info.circle.fill")
                             } else {
                                 Image(systemName: "square.and.arrow.down.fill")
                             }
-                            Text(isExporting ? "Speichere..." : "Speichern")
+                            
+                            Text(isExporting ? "Speichere..." : 
+                                 (cropDataUnchanged && saveCropMetadata && onlyMetadata ? "Kein Update" : "Speichern"))
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(filename.isEmpty || isExporting ? Color.blue.opacity(0.5) : Color.blue)
+                        .background({
+                            if isExporting || filename.isEmpty {
+                                return Color.gray.opacity(0.5)
+                            } else if cropDataUnchanged && saveCropMetadata && onlyMetadata {
+                                return Color.blue.opacity(0.7)
+                            } else {
+                                return Color.blue
+                            }
+                        }())
                         .foregroundColor(.white)
                         .cornerRadius(8)
                     }
@@ -320,6 +399,15 @@ struct ExportView: View {
     
     private func exportImage() {
         guard let imageData = imageData, let cropSettings = cropSettings else { return }
+        
+        // Prüfe ob Crop-Daten unverändert sind und nur Metadaten gespeichert werden sollen
+        if cropDataUnchanged && saveCropMetadata && onlyMetadata {
+            print("\n" + String(repeating: "=", count: 80))
+            print("ℹ️ KEINE ÄNDERUNGEN - Crop-Daten sind bereits identisch")
+            print(String(repeating: "=", count: 80))
+            exportResult = .noChanges
+            return
+        }
         
         print("\n" + String(repeating: "=", count: 80))
         print("🎬 EXPORT GESTARTET")

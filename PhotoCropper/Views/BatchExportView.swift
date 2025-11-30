@@ -172,13 +172,23 @@ struct BatchExportView: View {
                     }
                     
                     let successCount = exportResults.filter { $0.success }.count
+                    let skippedCount = exportResults.filter { $0.success && $0.message.contains("Übersprungen") }.count
+                    let writtenCount = successCount - skippedCount
                     let failCount = exportResults.count - successCount
                     
                     HStack(spacing: 20) {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("\(successCount) erfolgreich")
+                            Text("\(writtenCount) geschrieben")
+                        }
+                        
+                        if skippedCount > 0 {
+                            HStack {
+                                Image(systemName: "forward.circle.fill")
+                                    .foregroundColor(.blue)
+                                Text("\(skippedCount) übersprungen")
+                            }
                         }
                         
                         if failCount > 0 {
@@ -198,9 +208,15 @@ struct BatchExportView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(Array(exportResults.enumerated()), id: \.offset) { index, result in
                                 HStack(spacing: 8) {
-                                    Image(systemName: result.success ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                        .foregroundColor(result.success ? .green : .red)
-                                        .font(.caption)
+                                    if result.success && result.message.contains("Übersprungen") {
+                                        Image(systemName: "forward.circle.fill")
+                                            .foregroundColor(.blue)
+                                            .font(.caption)
+                                    } else {
+                                        Image(systemName: result.success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                            .foregroundColor(result.success ? .green : .red)
+                                            .font(.caption)
+                                    }
                                     
                                     Text(result.filename)
                                         .font(.caption)
@@ -208,7 +224,11 @@ struct BatchExportView: View {
                                     
                                     Spacer()
                                     
-                                    if !result.success {
+                                    if result.success && result.message.contains("Übersprungen") {
+                                        Text(result.message)
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                    } else if !result.success {
                                         Text(result.message)
                                             .font(.caption2)
                                             .foregroundColor(.red)
@@ -337,6 +357,35 @@ struct BatchExportView: View {
                 return
             }
             
+            // Prüfe ob Crop-Daten unverändert sind (nur wenn "Nur Metadaten" aktiv)
+            if self.onlyMetadata && self.saveCropMetadata {
+                if let existingMetadata = item.imageData.cropMetadata {
+                    let imageSize = item.imageData.pixelSize
+                    let normalized = cropSettings.normalizedCoordinates(for: imageSize)
+                    
+                    // Vergleiche mit Toleranz wegen Float-Genauigkeit
+                    let tolerance = 0.0001
+                    let originMatches = abs(normalized.origin.x - existingMetadata.originX) < tolerance &&
+                                       abs(normalized.origin.y - existingMetadata.originY) < tolerance
+                    let sizeMatches = abs(normalized.size.width - existingMetadata.width) < tolerance &&
+                                     abs(normalized.size.height - existingMetadata.height) < tolerance
+                    let modeMatches = cropSettings.mode.rawValue == existingMetadata.cropMode
+                    let ratioMatches = cropSettings.targetRatio.id == existingMetadata.targetRatio
+                    
+                    if originMatches && sizeMatches && modeMatches && ratioMatches {
+                        print("⏭️ Überspringe \(item.imageData.url.lastPathComponent) - Crop-Daten sind bereits identisch")
+                        DispatchQueue.main.async {
+                            completion(ExportResult(
+                                filename: item.imageData.url.lastPathComponent,
+                                success: true,
+                                message: "Übersprungen (keine Änderungen)"
+                            ))
+                        }
+                        return
+                    }
+                }
+            }
+            
             // Dateiname generieren
             let baseFilename = ExifDateParser.generateFilename(from: item.imageData)
             let ratioSuffix = ExifDateParser.suffixForRatio(cropSettings.targetRatio)
@@ -353,14 +402,16 @@ struct BatchExportView: View {
                 outputURL = directory.appendingPathComponent(filename)
             }
             
-            // Backup falls gewünscht
-            if self.createBackup && self.overwriteOriginal {
-                self.createBackupFile(for: item.imageData.url)
-            }
-            
             print("📂 Ziel: \(outputURL.path)")
             print("📄 Quelle: \(item.imageData.url.path)")
             print("⚙️ Mode: \(self.onlyMetadata ? "Nur Metadaten" : "Normal"), Overwrite: \(self.overwriteOriginal)")
+            print("💾 Backup: \(self.createBackup ? "Ja" : "Nein")")
+            
+            // Backup falls gewünscht
+            if self.createBackup && self.overwriteOriginal {
+                print("💾 Erstelle Backup...")
+                self.createBackupFile(for: item.imageData.url)
+            }
             
             // Export durchführen
             if self.onlyMetadata {
@@ -466,11 +517,13 @@ struct BatchExportView: View {
         do {
             let fileManager = FileManager.default
             if fileManager.fileExists(atPath: backupURL.path) {
+                print("   ⚠️ Entferne altes Backup: \(backupURL.lastPathComponent)")
                 try fileManager.removeItem(at: backupURL)
             }
             try fileManager.copyItem(at: url, to: backupURL)
+            print("   ✅ Backup erstellt: \(backupURL.lastPathComponent)")
         } catch {
-            print("Backup-Erstellung fehlgeschlagen: \(error)")
+            print("   ❌ Backup-Erstellung fehlgeschlagen: \(error.localizedDescription)")
         }
     }
 }

@@ -12,6 +12,25 @@ import CoreGraphics
 /// Service für Metadaten-Operationen (EXIF/XMP)
 class MetadataService {
     
+    /// Rundet einen Double-Wert auf maximal 5 Nachkommastellen
+    private static func roundToDecimalPlaces(_ value: Double, places: Int = 5) -> Double {
+        let multiplier = pow(10.0, Double(places))
+        return (value * multiplier).rounded() / multiplier
+    }
+    
+    /// Formatiert einen Double-Wert als String mit maximal 5 Nachkommastellen (entfernt trailing zeros)
+    private static func formatDecimal(_ value: Double, maxPlaces: Int = 5) -> String {
+        let rounded = roundToDecimalPlaces(value, places: maxPlaces)
+        // Formatiere als String und entferne unnötige trailing zeros
+        let formatted = String(format: "%.\(maxPlaces)f", rounded)
+        // Entferne trailing zeros nach dem Dezimalpunkt
+        if formatted.contains(".") {
+            let trimmed = formatted.trimmingCharacters(in: CharacterSet(charactersIn: "0"))
+            return trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+        }
+        return formatted
+    }
+    
     /// Liest existierende Subject-Tags aus und filtert PhotoCropper-Tags raus
     private static func readNonPhotoCropperSubjectTags(exiftoolPath: String, imageURL: URL) -> [String] {
         let process = Process()
@@ -140,18 +159,17 @@ class MetadataService {
         print("     - XMP-crs:CropTop/Left/Bottom/Right (Lightroom-kompatibel)")
         print("     - XMP-dc:Subject (7 PhotoCropper-Felder für vollständige Crop-Info)")
         
-        // Normalisierte Koordinaten berechnen
-        let normalizedOrigin = CGPoint(
-            x: cropBox.origin.x / imageSize.width,
-            y: cropBox.origin.y / imageSize.height
-        )
-        let normalizedSize = CGSize(
-            width: cropBox.width / imageSize.width,
-            height: cropBox.height / imageSize.height
-        )
+        // Normalisierte Koordinaten berechnen und auf 5 Nachkommastellen runden
+        let normalizedOriginX = roundToDecimalPlaces(cropBox.origin.x / imageSize.width)
+        let normalizedOriginY = roundToDecimalPlaces(cropBox.origin.y / imageSize.height)
+        let normalizedWidth = roundToDecimalPlaces(cropBox.width / imageSize.width)
+        let normalizedHeight = roundToDecimalPlaces(cropBox.height / imageSize.height)
         
-        let cropBottom = normalizedOrigin.y + normalizedSize.height
-        let cropRight = normalizedOrigin.x + normalizedSize.width
+        let normalizedOrigin = CGPoint(x: normalizedOriginX, y: normalizedOriginY)
+        let normalizedSize = CGSize(width: normalizedWidth, height: normalizedHeight)
+        
+        let cropBottom = roundToDecimalPlaces(normalizedOriginY + normalizedHeight)
+        let cropRight = roundToDecimalPlaces(normalizedOriginX + normalizedWidth)
         
         print("  Normalized: origin=(\(normalizedOrigin.x), \(normalizedOrigin.y)) size=(\(normalizedSize.width), \(normalizedSize.height))")
         
@@ -348,15 +366,14 @@ class MetadataService {
         
         print("⚠️ Verwende ImageIO Fallback (kann Bild re-encoden!)")
         
-        // Normalisierte Koordinaten berechnen
-        let normalizedOrigin = CGPoint(
-            x: cropBox.origin.x / imageSize.width,
-            y: cropBox.origin.y / imageSize.height
-        )
-        let normalizedSize = CGSize(
-            width: cropBox.width / imageSize.width,
-            height: cropBox.height / imageSize.height
-        )
+        // Normalisierte Koordinaten berechnen und auf 5 Nachkommastellen runden
+        let normalizedOriginX = roundToDecimalPlaces(cropBox.origin.x / imageSize.width)
+        let normalizedOriginY = roundToDecimalPlaces(cropBox.origin.y / imageSize.height)
+        let normalizedWidth = roundToDecimalPlaces(cropBox.width / imageSize.width)
+        let normalizedHeight = roundToDecimalPlaces(cropBox.height / imageSize.height)
+        
+        let normalizedOrigin = CGPoint(x: normalizedOriginX, y: normalizedOriginY)
+        let normalizedSize = CGSize(width: normalizedWidth, height: normalizedHeight)
         
         guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil) else {
             return .failure(MetadataServiceError.cannotReadImage)
@@ -472,8 +489,106 @@ class MetadataService {
         }
     }
     
+    /// Liest PhotoCropper-Tags aus XMP-dc:Subject mit exiftool
+    private static func readPhotoCropperTagsWithExiftool(exiftoolPath: String, imageURL: URL) -> [String: String]? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: exiftoolPath)
+        process.arguments = ["-XMP-dc:Subject", "-s3", imageURL.path]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else {
+                return nil
+            }
+            
+            print("🔍 Raw exiftool output für XMP-dc:Subject:")
+            print("   \(output)")
+            
+            // Parse PhotoCropper-Tags aus Subject
+            // Format kann sein:
+            // 1. Zeilen-separiert: jeder Tag in eigener Zeile
+            // 2. Komma-separiert: alle Tags in einer Zeile mit ", " getrennt
+            var cropTags: [String: String] = [:]
+            
+            // Zuerst versuchen: Komma-getrennt (häufigster Fall)
+            let allText = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            let subjectItems = allText.components(separatedBy: ", ")
+                .flatMap { $0.components(separatedBy: ",") }  // Auch ohne Leerzeichen
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { $0.hasPrefix("PhotoCropper:") }
+            
+            print("   Gefundene PhotoCropper-Tags: \(subjectItems.count)")
+            
+            for subject in subjectItems {
+                let withoutPrefix = subject.dropFirst("PhotoCropper:".count)
+                let parts = withoutPrefix.components(separatedBy: "=")
+                if parts.count == 2 {
+                    let key = parts[0].trimmingCharacters(in: .whitespaces)
+                    let value = parts[1].trimmingCharacters(in: .whitespaces)
+                    cropTags[key] = value
+                    print("   ✓ \(key) = \(value)")
+                }
+            }
+            
+            return cropTags.isEmpty ? nil : cropTags
+        } catch {
+            print("⚠️ Fehler beim Lesen der PhotoCropper-Tags: \(error)")
+            return nil
+        }
+    }
+    
     /// Liest Crop-Metadaten aus Bild-Datei
     static func readCropMetadata(imageURL: URL) -> CropMetadata? {
+        // Prüfe ob exiftool verfügbar ist für besseres Auslesen
+        let exiftoolPaths = [
+            "/opt/homebrew/bin/exiftool",
+            "/usr/local/bin/exiftool",
+            "/usr/bin/exiftool"
+        ]
+        
+        var cropTags: [String: String]?
+        if let exiftoolPath = exiftoolPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+            cropTags = readPhotoCropperTagsWithExiftool(exiftoolPath: exiftoolPath, imageURL: imageURL)
+        }
+        
+        // Wenn PhotoCropper-Tags gefunden wurden, verwende diese
+        if let tags = cropTags,
+           let cropOriginX = tags["CropOriginX"].flatMap(Double.init),
+           let cropOriginY = tags["CropOriginY"].flatMap(Double.init),
+           let cropWidth = tags["CropWidth"].flatMap(Double.init),
+           let cropHeight = tags["CropHeight"].flatMap(Double.init) {
+            
+            let origin = CGPoint(x: cropOriginX, y: cropOriginY)
+            let size = CGSize(width: cropWidth, height: cropHeight)
+            
+            let cropModeString = tags["CropMode"] ?? CropMode.standard.rawValue
+            let mode = CropMode(rawValue: cropModeString) ?? .standard
+            let originalRatio = tags["OriginalRatio"] ?? "unknown"
+            let targetRatioStr = tags["TargetRatio"] ?? "unknown"
+            
+            print("📖 PhotoCropper Crop-Metadaten gefunden:")
+            print("   Origin: (\(origin.x), \(origin.y))")
+            print("   Size: (\(size.width), \(size.height))")
+            print("   Mode: \(mode.rawValue)")
+            print("   Target Ratio: \(targetRatioStr)")
+            
+            return CropMetadata(
+                origin: origin,
+                size: size,
+                mode: mode,
+                originalRatio: originalRatio,
+                targetRatio: targetRatioStr
+            )
+        }
+        
+        // Fallback: Versuche Standard EXIF-Tags zu lesen
         guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
             return nil
@@ -495,14 +610,18 @@ class MetadataService {
         let cropModeString = xmpDict[EXIFTags.cropMode] as? String ?? CropMode.standard.rawValue
         let mode = CropMode(rawValue: cropModeString) ?? .standard
         let originalRatio = xmpDict[EXIFTags.originalRatio] as? String ?? "unknown"
-        let targetRatio = xmpDict[EXIFTags.targetRatio] as? String ?? "unknown"
+        let targetRatioStr = xmpDict[EXIFTags.targetRatio] as? String ?? "unknown"
+        
+        print("📖 Standard EXIF Crop-Metadaten gefunden:")
+        print("   Origin: (\(origin.x), \(origin.y))")
+        print("   Size: (\(size.width), \(size.height))")
         
         return CropMetadata(
             origin: origin,
             size: size,
             mode: mode,
             originalRatio: originalRatio,
-            targetRatio: targetRatio
+            targetRatio: targetRatioStr
         )
     }
     

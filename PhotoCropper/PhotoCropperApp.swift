@@ -14,7 +14,7 @@ struct PhotoCropperApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(batchManager: batchManager)
-                .frame(minWidth: 1200, minHeight: 800)
+                .frame(minWidth: 900, minHeight: 600)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
