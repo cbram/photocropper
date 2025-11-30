@@ -2,37 +2,79 @@
 //  MetadataService.swift
 //  PhotoCropper
 //
-//  Handhabt EXIF/XMP-Metadaten: Lesen und Schreiben von Crop-Koordinaten
+//  Handles EXIF/XMP metadata: Reading and writing of crop coordinates
+//
+//  This service acts as a facade, delegating to specialized components:
+//  - MetadataReader: Reading crop metadata
+//  - MetadataWriter: Writing crop metadata (via exiftool)
+//  - ImageIO fallback: Writing metadata when exiftool is unavailable
 //
 
 import Foundation
 import ImageIO
 import CoreGraphics
 
-/// Service für Metadaten-Operationen (EXIF/XMP)
+/// Facade service for metadata operations (EXIF/XMP)
+///
+/// This service provides a simplified interface for reading and writing crop metadata.
+/// It automatically selects the best strategy based on available tools:
+/// - **Primary**: Uses `exiftool` via `MetadataWriter` (lossless, no image modification)
+/// - **Fallback**: Uses ImageIO framework (may re-encode image)
+///
+/// ## Architecture
+/// ```
+/// MetadataService (Facade)
+///     ├── MetadataReader: Reading crop metadata
+///     ├── MetadataWriter: Writing via exiftool (preferred)
+///     └── ImageIO Fallback: Writing when exiftool unavailable
+/// ```
+///
+/// ## Usage Example
+/// ```swift
+/// // Save metadata
+/// let result = MetadataService.saveCropMetadata(
+///     imageURL: url,
+///     cropBox: CGRect(x: 100, y: 100, width: 800, height: 600),
+///     imageSize: CGSize(width: 1920, height: 1080),
+///     targetRatio: .ratio16_9,
+///     mode: .mcuSensitive,
+///     originalRatio: "16:9"
+/// )
+///
+/// // Read metadata
+/// if let metadata = MetadataService.readCropMetadata(imageURL: url) {
+///     print("Crop found: \(metadata.origin), size: \(metadata.size)")
+/// }
+/// ```
 class MetadataService {
     
-    /// Rundet einen Double-Wert auf maximal 5 Nachkommastellen
-    private static func roundToDecimalPlaces(_ value: Double, places: Int = 5) -> Double {
-        let multiplier = pow(10.0, Double(places))
-        return (value * multiplier).rounded() / multiplier
+    // MARK: - Constants
+    
+    /// XMP namespace URIs
+    private enum XMPNamespace {
+        static let adobeXAP = "http://ns.adobe.com/xap/1.0/"
+        static let photoCropper = "http://photocropper.app/1.0/"
     }
     
-    /// Formatiert einen Double-Wert als String mit maximal 5 Nachkommastellen (entfernt trailing zeros)
-    private static func formatDecimal(_ value: Double, maxPlaces: Int = 5) -> String {
-        let rounded = roundToDecimalPlaces(value, places: maxPlaces)
-        // Formatiere als String und entferne unnötige trailing zeros
-        let formatted = String(format: "%.\(maxPlaces)f", rounded)
-        // Entferne trailing zeros nach dem Dezimalpunkt
-        if formatted.contains(".") {
-            let trimmed = formatted.trimmingCharacters(in: CharacterSet(charactersIn: "0"))
-            return trimmed.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
-        }
-        return formatted
-    }
+    /// Number of decimal places for coordinate rounding
+    private static let decimalPlaces = 5
     
+    // MARK: - Public Interface
     
-    /// Saves crop metadata to image file using exiftool (lossless!)
+    /// Saves crop metadata to an image file
+    ///
+    /// This method automatically selects the best writing strategy:
+    /// 1. **Preferred**: Uses exiftool (lossless, no image modification)
+    /// 2. **Fallback**: Uses ImageIO (may re-encode image)
+    ///
+    /// - Parameters:
+    ///   - imageURL: URL to the image file
+    ///   - cropBox: Crop rectangle in pixel coordinates
+    ///   - imageSize: Original image size
+    ///   - targetRatio: Target aspect ratio
+    ///   - mode: Crop mode (MCU-sensitive or standard)
+    ///   - originalRatio: Original aspect ratio as string
+    /// - Returns: Result indicating success or failure
     static func saveCropMetadata(
         imageURL: URL,
         cropBox: CGRect,
@@ -42,10 +84,10 @@ class MetadataService {
         originalRatio: String
     ) -> Result<Void, Error> {
         
-        // Check if exiftool is available
+        // Try exiftool first (preferred method)
         guard let exiftoolPath = ExiftoolPathResolver.findExiftoolPath() else {
             print("⚠️ exiftool not found - falling back to ImageIO")
-            return saveCropMetadataWithImageIO(
+            return saveWithImageIO(
                 imageURL: imageURL,
                 cropBox: cropBox,
                 imageSize: imageSize,
@@ -55,7 +97,7 @@ class MetadataService {
             )
         }
         
-        return saveCropMetadataWithExiftool(
+        return saveWithExiftool(
             exiftoolPath: exiftoolPath,
             imageURL: imageURL,
             cropBox: cropBox,
@@ -66,7 +108,50 @@ class MetadataService {
         )
     }
     
-    /// Saves crop metadata to image file using exiftool (lossless!)
+    /// Reads crop metadata from an image file
+    ///
+    /// - Parameter imageURL: URL to the image file
+    /// - Returns: `CropMetadata` if crop data found, otherwise `nil`
+    static func readCropMetadata(imageURL: URL) -> CropMetadata? {
+        return MetadataReader.readCropMetadata(imageURL: imageURL)
+    }
+    
+    /// Checks if XMP data exists in an image file
+    ///
+    /// - Parameter imageURL: URL to the image file
+    /// - Returns: `true` if XMP data exists, otherwise `false`
+    static func hasXMPData(imageURL: URL) -> Bool {
+        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
+            return false
+        }
+        
+        // Check various possible XMP locations
+        return properties[kCGImagePropertyMakerAppleDictionary as String] != nil ||
+               properties[kCGImagePropertyIPTCDictionary as String] != nil
+    }
+    
+    /// Ensures XMP data exists in image file
+    ///
+    /// - Parameter imageURL: URL to the image file
+    /// - Returns: Result indicating success or failure
+    ///
+    /// - Note: Currently a no-op; XMP data is created automatically when saving metadata
+    static func ensureXMPData(imageURL: URL) -> Result<Void, Error> {
+        if hasXMPData(imageURL: imageURL) {
+            return .success(())
+        }
+        
+        // XMP data will be created automatically on next metadata save
+        return .success(())
+    }
+    
+    // MARK: - Private Methods - Writing Strategies
+    
+    /// Saves crop metadata using exiftool (preferred, lossless)
+    ///
+    /// This method delegates to `MetadataWriter` which uses exiftool's three-pass strategy
+    /// to ensure metadata integrity without modifying the image data.
     ///
     /// - Parameters:
     ///   - exiftoolPath: Path to the exiftool executable
@@ -74,12 +159,10 @@ class MetadataService {
     ///   - cropBox: Crop rectangle in pixel coordinates
     ///   - imageSize: Original image size
     ///   - targetRatio: Target aspect ratio
-    ///   - mode: Crop mode (MCU-sensitive or standard)
-    ///   - originalRatio: Original aspect ratio as string
+    ///   - mode: Crop mode
+    ///   - originalRatio: Original aspect ratio
     /// - Returns: Result indicating success or failure
-    ///
-    /// - Note: This method delegates to `MetadataWriter` for actual writing logic
-    private static func saveCropMetadataWithExiftool(
+    private static func saveWithExiftool(
         exiftoolPath: String,
         imageURL: URL,
         cropBox: CGRect,
@@ -98,12 +181,24 @@ class MetadataService {
             originalRatio: originalRatio
         )
         
-        // Convert MetadataWriterError to MetadataServiceError
         return result.mapError { $0 as Error }
     }
     
-    /// Fallback: Speichert Crop-Metadaten mit ImageIO (kann Bild verändern!)
-    private static func saveCropMetadataWithImageIO(
+    /// Saves crop metadata using ImageIO framework (fallback, may re-encode)
+    ///
+    /// This fallback method is used when exiftool is not available.
+    /// **Warning**: This method may re-encode the image, potentially changing file size
+    /// and losing some metadata like MakerNotes.
+    ///
+    /// - Parameters:
+    ///   - imageURL: URL to the image file
+    ///   - cropBox: Crop rectangle in pixel coordinates
+    ///   - imageSize: Original image size
+    ///   - targetRatio: Target aspect ratio
+    ///   - mode: Crop mode
+    ///   - originalRatio: Original aspect ratio
+    /// - Returns: Result indicating success or failure
+    private static func saveWithImageIO(
         imageURL: URL,
         cropBox: CGRect,
         imageSize: CGSize,
@@ -112,64 +207,41 @@ class MetadataService {
         originalRatio: String
     ) -> Result<Void, Error> {
         
-        print("⚠️ Verwende ImageIO Fallback (kann Bild re-encoden!)")
+        print("⚠️ Using ImageIO fallback (may re-encode image!)")
         
-        // Normalisierte Koordinaten berechnen und auf 5 Nachkommastellen runden
-        let normalizedOriginX = roundToDecimalPlaces(cropBox.origin.x / imageSize.width)
-        let normalizedOriginY = roundToDecimalPlaces(cropBox.origin.y / imageSize.height)
-        let normalizedWidth = roundToDecimalPlaces(cropBox.width / imageSize.width)
-        let normalizedHeight = roundToDecimalPlaces(cropBox.height / imageSize.height)
-        
-        let normalizedOrigin = CGPoint(x: normalizedOriginX, y: normalizedOriginY)
-        let normalizedSize = CGSize(width: normalizedWidth, height: normalizedHeight)
+        // Normalize coordinates
+        let normalized = MetadataFormatter.normalizeCoordinates(
+            cropBox: cropBox,
+            imageSize: imageSize
+        )
         
         guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil) else {
             return .failure(MetadataServiceError.cannotReadImage)
         }
         
-        // Image reference wird nicht benötigt für Metadata-only update
-        // guard let imageRef = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-        //     return .failure(MetadataServiceError.cannotReadImage)
-        // }
-        
-        // Bestehende Metadaten auslesen
+        // Read existing metadata
         var metadata = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] ?? [:]
         
-        print("📊 Metadaten-Service:")
-        print("  Original Image Size: \(imageSize.width)x\(imageSize.height)")
-        print("  Crop Box (pixels): \(cropBox)")
-        print("  Normalized Origin: \(normalizedOrigin)")
-        print("  Normalized Size: \(normalizedSize)")
+        print("📊 Metadata Service (ImageIO):")
+        print("  Image Size: \(imageSize.width)×\(imageSize.height)")
+        print("  Crop Box: \(cropBox)")
+        print("  Normalized: origin=(\(normalized.origin.x), \(normalized.origin.y)) size=(\(normalized.size.width), \(normalized.size.height))")
         
-        // EXIF-Dictionary erstellen/aktualisieren
+        // Update EXIF dictionary
         var exifDict = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? [:]
-        
-        // DefaultCropOrigin und DefaultCropSize speichern (als Array von NSNumber)
-        exifDict["DefaultCropOrigin"] = [NSNumber(value: normalizedOrigin.x), NSNumber(value: normalizedOrigin.y)]
-        exifDict["DefaultCropSize"] = [NSNumber(value: normalizedSize.width), NSNumber(value: normalizedSize.height)]
-        
-        print("  ✅ EXIF DefaultCropOrigin: [\(normalizedOrigin.x), \(normalizedOrigin.y)]")
-        print("  ✅ EXIF DefaultCropSize: [\(normalizedSize.width), \(normalizedSize.height)]")
-        
+        exifDict["DefaultCropOrigin"] = [NSNumber(value: normalized.origin.x), NSNumber(value: normalized.origin.y)]
+        exifDict["DefaultCropSize"] = [NSNumber(value: normalized.size.width), NSNumber(value: normalized.size.height)]
         metadata[kCGImagePropertyExifDictionary as String] = exifDict
         
-        // XMP-Dictionary für Crop-Daten
-        var xmpDict = metadata["http://ns.adobe.com/xap/1.0/" as String] as? [String: Any] ?? [:]
+        // Update XMP dictionary with Adobe Lightroom-compatible tags
+        var xmpDict = metadata[XMPNamespace.adobeXAP as String] as? [String: Any] ?? [:]
+        xmpDict["crs:CropTop"] = NSNumber(value: normalized.origin.y)
+        xmpDict["crs:CropLeft"] = NSNumber(value: normalized.origin.x)
+        xmpDict["crs:CropBottom"] = NSNumber(value: normalized.cropBottom)
+        xmpDict["crs:CropRight"] = NSNumber(value: normalized.cropRight)
+        metadata[XMPNamespace.adobeXAP as String] = xmpDict
         
-        // Adobe XMP Crop Tags (Lightroom-kompatibel)
-        xmpDict["crs:CropTop"] = NSNumber(value: normalizedOrigin.y)
-        xmpDict["crs:CropLeft"] = NSNumber(value: normalizedOrigin.x)
-        xmpDict["crs:CropBottom"] = NSNumber(value: normalizedOrigin.y + normalizedSize.height)
-        xmpDict["crs:CropRight"] = NSNumber(value: normalizedOrigin.x + normalizedSize.width)
-        
-        print("  ✅ XMP CropTop: \(normalizedOrigin.y)")
-        print("  ✅ XMP CropLeft: \(normalizedOrigin.x)")
-        print("  ✅ XMP CropBottom: \(normalizedOrigin.y + normalizedSize.height)")
-        print("  ✅ XMP CropRight: \(normalizedOrigin.x + normalizedSize.width)")
-        
-        metadata["http://ns.adobe.com/xap/1.0/" as String] = xmpDict
-        
-        // Custom Tags in IPTC-Dictionary für unsere eigene Verwendung
+        // Add custom PhotoCropper tags to IPTC dictionary
         var iptcDict = metadata[kCGImagePropertyIPTCDictionary as String] as? [String: Any] ?? [:]
         iptcDict[EXIFTags.Custom.cropMode] = mode.rawValue
         iptcDict[EXIFTags.Custom.originalRatio] = originalRatio
@@ -177,136 +249,79 @@ class MetadataService {
         iptcDict[EXIFTags.Custom.cropDateTime] = ISO8601DateFormatter().string(from: Date())
         metadata[kCGImagePropertyIPTCDictionary as String] = iptcDict
         
-        print("  ✅ IPTC Custom Tags geschrieben")
+        print("  ✅ Metadata prepared (EXIF, XMP, IPTC)")
         
-        // Temporäre Datei im System-Temp-Verzeichnis erstellen (nicht im Zielverzeichnis!)
+        // Write to temporary file
         let tempDir = FileManager.default.temporaryDirectory
         let tempURL = tempDir.appendingPathComponent("photocropper_\(UUID().uuidString).\(imageURL.pathExtension)")
         
-        // Bild mit neuen Metadaten speichern
         guard let destination = CGImageDestinationCreateWithURL(tempURL as CFURL, CGImageSourceGetType(imageSource)!, 1, nil) else {
             return .failure(MetadataServiceError.cannotCreateDestination)
         }
         
-        // WICHTIG: Alle Properties übernehmen inklusive MakerNotes, GPS, etc.
+        // Use merge mode to preserve all existing metadata
         let options: [String: Any] = [
-            kCGImageDestinationLossyCompressionQuality as String: 1.0,  // Maximum Qualität
+            kCGImageDestinationLossyCompressionQuality as String: 1.0,  // Maximum quality
             kCGImageDestinationMetadata as String: metadata,
-            kCGImageDestinationMergeMetadata as String: true  // Merge statt replace!
+            kCGImageDestinationMergeMetadata as String: true  // Merge instead of replace
         ]
         
         CGImageDestinationAddImageFromSource(destination, imageSource, 0, options as CFDictionary)
         
         guard CGImageDestinationFinalize(destination) else {
-            // Cleanup bei Fehler
             try? FileManager.default.removeItem(at: tempURL)
             return .failure(MetadataServiceError.cannotFinalize)
         }
         
-        print("  ✅ Bild mit Metadaten geschrieben (Merge-Modus)")
+        print("  ✅ Image written with metadata (merge mode)")
         
-        // Original-Datei ersetzen
+        // Replace original file with atomic operation
+        return replaceFileAtomically(original: imageURL, replacement: tempURL)
+    }
+    
+    // MARK: - Private Helpers
+    
+    /// Replaces a file atomically with backup/restore on failure
+    ///
+    /// - Parameters:
+    ///   - original: URL of the original file to replace
+    ///   - replacement: URL of the replacement file
+    /// - Returns: Result indicating success or failure
+    private static func replaceFileAtomically(original: URL, replacement: URL) -> Result<Void, Error> {
+        let fileManager = FileManager.default
+        let tempDir = fileManager.temporaryDirectory
+        let backupURL = tempDir.appendingPathComponent("photocropper_backup_\(UUID().uuidString).\(original.pathExtension)")
+        
         do {
-            let fileManager = FileManager.default
-            
-            // Backup der Original-Datei (falls vorhanden)
-            let backupURL = tempDir.appendingPathComponent("photocropper_backup_\(UUID().uuidString).\(imageURL.pathExtension)")
-            if fileManager.fileExists(atPath: imageURL.path) {
-                try fileManager.moveItem(at: imageURL, to: backupURL)
+            // Create backup of original file
+            if fileManager.fileExists(atPath: original.path) {
+                try fileManager.moveItem(at: original, to: backupURL)
             }
             
-            // Temp-Datei an Ziel verschieben
+            // Move replacement to original location
             do {
-                try fileManager.moveItem(at: tempURL, to: imageURL)
-                // Backup löschen bei Erfolg
+                try fileManager.moveItem(at: replacement, to: original)
+                // Delete backup on success
                 try? fileManager.removeItem(at: backupURL)
                 return .success(())
             } catch {
-                // Bei Fehler: Backup wiederherstellen
+                // Restore backup on failure
                 if fileManager.fileExists(atPath: backupURL.path) {
-                    try? fileManager.moveItem(at: backupURL, to: imageURL)
+                    try? fileManager.moveItem(at: backupURL, to: original)
                 }
-                // Temp-Datei löschen
-                try? fileManager.removeItem(at: tempURL)
+                try? fileManager.removeItem(at: replacement)
                 return .failure(error)
             }
         } catch {
-            // Cleanup bei Fehler
-            try? FileManager.default.removeItem(at: tempURL)
+            try? fileManager.removeItem(at: replacement)
             return .failure(error)
         }
     }
-    
-    /// Reads crop metadata from image file
-    ///
-    /// - Parameter imageURL: URL to the image file
-    /// - Returns: `CropMetadata` if found, otherwise `nil`
-    ///
-    /// - Note: This method delegates to `MetadataReader` for actual reading logic
-    static func readCropMetadata(imageURL: URL) -> CropMetadata? {
-        return MetadataReader.readCropMetadata(imageURL: imageURL)
-    }
-    
-    /// Erstellt XMP-XML-String für Metadaten
-    private static func createXMPString(
-        cropOrigin: CGPoint,
-        cropSize: CGSize,
-        mode: CropMode,
-        originalRatio: String,
-        targetRatio: String
-    ) -> String {
-        let dateFormatter = ISO8601DateFormatter()
-        let dateString = dateFormatter.string(from: Date())
-        
-        return """
-        <?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
-        <x:xmpmeta xmlns:x="adobe:ns:meta/">
-        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-        <rdf:Description rdf:about="" xmlns:photocropper="http://photocropper.app/1.0/">
-        <photocropper:CropMode>\(mode.rawValue)</photocropper:CropMode>
-        <photocropper:OriginalRatio>\(originalRatio)</photocropper:OriginalRatio>
-        <photocropper:TargetRatio>\(targetRatio)</photocropper:TargetRatio>
-        <photocropper:CropDateTime>\(dateString)</photocropper:CropDateTime>
-        <photocropper:DefaultCropOrigin>\(cropOrigin.x),\(cropOrigin.y)</photocropper:DefaultCropOrigin>
-        <photocropper:DefaultCropSize>\(cropSize.width),\(cropSize.height)</photocropper:DefaultCropSize>
-        </rdf:Description>
-        </rdf:RDF>
-        </x:xmpmeta>
-        <?xpacket end="w"?>
-        """
-    }
-    
-    /// Prüft ob XMP-Daten vorhanden sind
-    static func hasXMPData(imageURL: URL) -> Bool {
-        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] else {
-            return false
-        }
-        
-        // Prüfe verschiedene mögliche XMP-Locations
-        if properties[kCGImagePropertyMakerAppleDictionary as String] != nil {
-            return true
-        }
-        if properties[kCGImagePropertyIPTCDictionary as String] != nil {
-            return true
-        }
-        
-        return false
-    }
-    
-    /// Erstellt XMP-Daten falls nicht vorhanden (für JPEG ohne XMP)
-    static func ensureXMPData(imageURL: URL) -> Result<Void, Error> {
-        if hasXMPData(imageURL: imageURL) {
-            return .success(())
-        }
-        
-        // XMP-Daten müssen beim nächsten Speichern erstellt werden
-        // Diese Funktion markiert nur, dass XMP erstellt werden soll
-        return .success(())
-    }
 }
 
-/// Metadaten-Service-Fehler
+// MARK: - Error Types
+
+/// Errors that can occur during metadata operations
 enum MetadataServiceError: LocalizedError {
     case cannotReadImage
     case cannotCreateDestination
@@ -317,16 +332,15 @@ enum MetadataServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cannotReadImage:
-            return "Bild konnte nicht gelesen werden"
+            return "Could not read image"
         case .cannotCreateDestination:
-            return "Ziel-Datei konnte nicht erstellt werden"
+            return "Could not create destination file"
         case .cannotFinalize:
-            return "Metadaten konnten nicht finalisiert werden"
+            return "Could not finalize metadata"
         case .exiftoolFailed:
-            return "exiftool konnte Metadaten nicht schreiben"
+            return "exiftool could not write metadata"
         case .xmpCreationFailed:
-            return "XMP-Daten konnten nicht erstellt werden"
+            return "Could not create XMP data"
         }
     }
 }
-
