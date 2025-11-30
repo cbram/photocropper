@@ -371,6 +371,9 @@ class MetadataWriter {
         // This is the exact command that works for the user!
         args.append("-IPTC:Keywords<XMP-dc:Subject")
         
+        // Force IPTCDigest recalculation to ensure XMP and IPTC are in sync
+        args.append("-IPTCDigest=new")
+        
         args.append(imageURL.path)
         
         return args
