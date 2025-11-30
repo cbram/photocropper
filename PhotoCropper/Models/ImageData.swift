@@ -247,13 +247,4 @@ extension ExifDateParser {
     /// Parses an EXIF date string into a Date object
     ///
     /// This is a convenience wrapper around the ExifDateParser service
-    /// for backwards compatibility with ImageData.
-    ///
-    /// - Parameter dateString: EXIF date string in format "yyyy:MM:dd HH:mm:ss"
-    /// - Returns: Parsed Date object, or nil if parsing fails
-    static func parseDate(from dateString: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-        return formatter.date(from: dateString)
-    }
 }
