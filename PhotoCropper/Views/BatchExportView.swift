@@ -413,34 +413,43 @@ struct BatchExportView: View {
                 self.createBackupFile(for: item.imageData.url)
             }
             
+            // Determine actual output URL (might be different if file needs renaming)
+            var actualOutputURL = outputURL
+            
             // Perform export
             if self.onlyMetadata {
                 // Metadata only: Copy file if necessary
                 if !self.overwriteOriginal {
-                    do {
-                        print("📋 Copying for metadata mode...")
-                        try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
-                    } catch {
-                        print("❌ Copy failed: \(error.localizedDescription)")
+                    print("📋 Copying for metadata mode...")
+                    guard let finalURL = FileManager.default.copyItemSafely(
+                        from: item.imageData.url,
+                        to: outputURL
+                    ) else {
+                        print("❌ Copy failed: Could not copy to \(outputURL.path)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
                                 success: false,
-                                message: "Copy failed: \(error.localizedDescription)"
+                                message: "Copy failed: Could not copy file"
                             ))
                         }
                         return
                     }
+                    actualOutputURL = finalURL
+                    print("✅ File copied to: \(finalURL.lastPathComponent)")
                 }
             } else {
                 // Physical crop mode
+                // Resolve output URL if file already exists
+                actualOutputURL = self.resolveOutputURL(outputURL)
+                
                 if cropSettings.mode == .mcuSensitive && item.imageData.format == .jpeg {
                     print("✂️ MCU mode: Lossless JPEG cropping...")
                     // MCU-lossless cropping for JPEG
                     let result = JPEGService.cropLossless(
                         imageURL: item.imageData.url,
                         cropRect: cropSettings.cropBox,
-                        outputURL: outputURL
+                        outputURL: actualOutputURL
                     )
                     
                     if case .failure(let error) = result {
@@ -460,7 +469,7 @@ struct BatchExportView: View {
                     let result = ImageCropService.cropStandard(
                         imageURL: item.imageData.url,
                         cropRect: cropSettings.cropBox,
-                        outputURL: outputURL
+                        outputURL: actualOutputURL
                     )
                     
                     if case .failure(let error) = result {
@@ -483,7 +492,7 @@ struct BatchExportView: View {
             if self.saveCropMetadata && self.onlyMetadata {
                 print("💾 Saving crop metadata (metadata-only mode)...")
                 let result = MetadataService.saveCropMetadata(
-                    imageURL: outputURL,
+                    imageURL: actualOutputURL,
                     cropBox: cropSettings.cropBox,
                     imageSize: item.imageData.pixelSize,
                     targetRatio: cropSettings.targetRatio,
@@ -505,15 +514,47 @@ struct BatchExportView: View {
                 print("💾 Skipping crop metadata (image was physically cropped)")
             }
             
-            // Success!
+            // Success! Report actual filename (might be different if renamed)
+            let actualFilename = actualOutputURL.lastPathComponent
             DispatchQueue.main.async {
                 completion(ExportResult(
-                    filename: filename,
+                    filename: actualFilename,
                     success: true,
                     message: "OK"
                 ))
             }
         }
+    }
+    
+    /// Resolves output URL by adding number suffix if file exists
+    ///
+    /// - Parameter url: Desired output URL
+    /// - Returns: Available URL (might have number suffix added)
+    private func resolveOutputURL(_ url: URL) -> URL {
+        var finalURL = url
+        var counter = 1
+        let fileManager = FileManager.default
+        
+        while fileManager.fileExists(atPath: finalURL.path) {
+            let filename = url.deletingPathExtension().lastPathComponent
+            let ext = url.pathExtension
+            let directory = url.deletingLastPathComponent()
+            
+            finalURL = directory.appendingPathComponent("\(filename) (\(counter)).\(ext)")
+            counter += 1
+            
+            // Safety limit
+            if counter > 1000 {
+                print("⚠️ Too many conflicting filenames, using original")
+                return url
+            }
+        }
+        
+        if finalURL != url {
+            print("ℹ️ File exists, using alternative name: \(finalURL.lastPathComponent)")
+        }
+        
+        return finalURL
     }
     
     private func createBackupFile(for url: URL) {

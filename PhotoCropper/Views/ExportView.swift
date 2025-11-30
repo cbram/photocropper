@@ -547,15 +547,11 @@ struct ExportView: View {
     }
     
     private func copyImage(from sourceURL: URL, to destURL: URL) {
-        do {
-            let fileManager = FileManager.default
-            if fileManager.fileExists(atPath: destURL.path) {
-                try fileManager.removeItem(at: destURL)
-            }
-            try fileManager.copyItem(at: sourceURL, to: destURL)
-        } catch {
-            exportResult = .failure("Copy failed: \(error.localizedDescription)")
+        guard let finalURL = FileManager.default.copyItemSafely(from: sourceURL, to: destURL) else {
+            exportResult = .failure("Copy failed: Could not copy file")
+            return
         }
+        print("✅ File copied to: \(finalURL.lastPathComponent)")
     }
     
     private func createBackupFile(for url: URL) {
