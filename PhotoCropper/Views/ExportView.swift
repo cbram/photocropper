@@ -2,7 +2,7 @@
 //  ExportView.swift
 //  PhotoCropper
 //
-//  Export-Dialog mit Dateinamen-Generierung und Speicher-Optionen
+//  Export dialog with filename generation and save options
 //
 
 import SwiftUI
@@ -18,18 +18,18 @@ struct ExportView: View {
     @State private var outputDirectory: URL?
     @State private var overwriteOriginal: Bool = false
     @State private var createBackup: Bool = false
-    @State private var saveCropMetadata: Bool = true  // Neue Option für EXIF-Speicherung
-    @State private var onlyMetadata: Bool = false  // NUR Metadaten speichern, nicht croppen
+    @State private var saveCropMetadata: Bool = true  // New option for EXIF storage
+    @State private var onlyMetadata: Bool = false  // ONLY save metadata, don't crop
     @State private var isExporting: Bool = false
     @State private var exportResult: ExportResult?
     
     enum ExportResult {
         case success(URL, metadataSaved: Bool, cropData: String)
         case failure(String)
-        case noChanges  // Neue Option: Keine Änderungen
+        case noChanges  // New option: No changes
     }
     
-    // Prüft ob die aktuellen Crop-Settings mit den gespeicherten Metadaten übereinstimmen
+    // Checks if current crop settings match the saved metadata
     private var cropDataUnchanged: Bool {
         guard let imageData = imageData,
               let cropSettings = cropSettings,
@@ -40,7 +40,7 @@ struct ExportView: View {
         let imageSize = imageData.pixelSize
         let normalized = cropSettings.normalizedCoordinates(for: imageSize)
         
-        // Vergleiche mit einer kleinen Toleranz (0.0001) wegen Float-Genauigkeit
+        // Compare with small tolerance (0.0001) due to float precision
         let tolerance = 0.0001
         let originMatches = abs(normalized.origin.x - existingMetadata.originX) < tolerance &&
                            abs(normalized.origin.y - existingMetadata.originY) < tolerance
@@ -274,10 +274,10 @@ struct ExportView: View {
             
             Spacer()
             
-            // Buttons - Variieren je nach Status - IMMER außerhalb des if imageData
+            // Buttons - vary based on status - ALWAYS outside the if imageData
             HStack(spacing: 12) {
                 if exportResult != nil {
-                    // Nach Export: Nur OK Button zum Schließen
+                    // After export: only OK button to close
                     Button(action: {
                         exportResult = nil
                         isPresented = false
@@ -294,7 +294,7 @@ struct ExportView: View {
                     }
                     .buttonStyle(.plain)
                 } else if imageData != nil {
-                    // Vor Export: Abbrechen + Speichern
+                    // Before export: Cancel + Save
                     Button(action: {
                         isPresented = false
                     }) {
@@ -382,7 +382,7 @@ struct ExportView: View {
     private func setupDefaultOutputDirectory() {
         guard let imageData = imageData else { return }
         
-        // Standard-Zielordner ist der Ordner des Original-Fotos
+        // Default target folder is the folder of the original photo
         outputDirectory = imageData.url.deletingLastPathComponent()
     }
     
@@ -400,7 +400,7 @@ struct ExportView: View {
     private func exportImage() {
         guard let imageData = imageData, let cropSettings = cropSettings else { return }
         
-        // Prüfe ob Crop-Daten unverändert sind und nur Metadaten gespeichert werden sollen
+        // Check if crop data is unchanged and only metadata should be saved
         if cropDataUnchanged && saveCropMetadata && onlyMetadata {
             print("\n" + String(repeating: "=", count: 80))
             print("ℹ️ KEINE ÄNDERUNGEN - Crop-Daten sind bereits identisch")
@@ -415,7 +415,7 @@ struct ExportView: View {
         
         isExporting = true
         
-        // Security-Scoped Resource Access starten
+        // Start security-scoped resource access
         let sourceAccess = imageData.url.startAccessingSecurityScopedResource()
         defer {
             if sourceAccess {
@@ -438,7 +438,7 @@ struct ExportView: View {
             outputURL = directory.appendingPathComponent(finalFilename)
         }
         
-        // Security-Scoped Access für Output-Verzeichnis
+        // Security-scoped access for output directory
         let outputAccess = outputURL.startAccessingSecurityScopedResource()
         defer {
             if outputAccess {
@@ -446,8 +446,8 @@ struct ExportView: View {
             }
         }
         
-        // SCHRITT 1: Datei kopieren/croppen (oder nur bei Metadaten-Only überspringen)
-        print("\n📋 SCHRITT 1: Datei vorbereiten")
+        // STEP 1: Copy/crop file (or skip for metadata-only)
+        print("\n📋 STEP 1: Prepare file")
         print("  Mode: \(cropSettings.mode.rawValue)")
         print("  Format: \(imageData.format)")
         print("  Nur Metadaten: \(onlyMetadata)")
@@ -476,7 +476,7 @@ struct ExportView: View {
         
         print("  ✓ Schritt 1 abgeschlossen")
         
-        // Falls copyImage oder performLosslessCrop fehlgeschlagen ist, abbrechen
+        // If copyImage or performLosslessCrop failed, abort
         if exportResult != nil {
             isExporting = false
             return

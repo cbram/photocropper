@@ -131,7 +131,7 @@ struct BatchImageListItemView: View {
                 .font(.caption)
                 .frame(width: 16)
             
-            // Thumbnail mit Badge
+            // Thumbnail with badge
             ZStack(alignment: .topTrailing) {
                 if let thumbnail = item.thumbnail {
                     Image(nsImage: thumbnail)
@@ -151,7 +151,7 @@ struct BatchImageListItemView: View {
                         )
                 }
                 
-                // Badge für gespeicherte Crop-Daten auf Thumbnail - DEUTLICH SICHTBAR
+                // Badge for saved crop data on thumbnail - CLEARLY VISIBLE
                 if item.imageData.hasCropMetadata {
                     ZStack {
                         Circle()
@@ -181,7 +181,7 @@ struct BatchImageListItemView: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
                 
-                // Zeige gespeicherte Crop-Info oder neue Crop-Einstellungen
+                // Show saved crop info or new crop settings
                 if let ratio = item.cropSettings?.targetRatio {
                     Text("→ \(ratio.id)")
                         .font(.caption2)
@@ -190,7 +190,7 @@ struct BatchImageListItemView: View {
                     HStack(spacing: 2) {
                         Image(systemName: "crop")
                             .font(.system(size: 8))
-                        Text("Gespeichert")
+                        Text("Saved")
                     }
                     .font(.caption2)
                     .foregroundColor(.blue)

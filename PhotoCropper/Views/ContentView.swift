@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  PhotoCropper
 //
-//  Haupt-View mit Canvas, Controls und Navigation
+//  Main view with canvas, controls, and navigation
 //
 
 import SwiftUI
@@ -14,7 +14,7 @@ struct ContentView: View {
     @StateObject private var keyboardMonitor = KeyboardMonitor()
     @FocusState private var canvasHasFocus: Bool
     
-    // Crop-Settings (gelten für aktuelles Bild)
+    // Crop settings (applied to current image)
     @State private var cropBox: CGRect = .zero
     @State private var targetRatio: AspectRatio = .ratio16_9
     @State private var cropMode: CropMode = .mcuSensitive
@@ -23,13 +23,13 @@ struct ContentView: View {
     @State private var customHeight: String = "9"
     @State private var showBatchExport: Bool = false
     
-    // Flag um onChange-Handler beim Laden von Metadaten zu unterdrücken
+    // Flag to suppress onChange handlers when loading metadata
     @State private var isLoadingFromMetadata: Bool = false
     
-    // Flag um onChange-Handler während Drag-Operationen zu unterdrücken
+    // Flag to suppress onChange handlers during drag operations
     @State private var isUpdatingFromDrag: Bool = false
     
-    // Computed property für Custom-Ratio
+    // Computed property for custom ratio
     private var effectiveTargetRatio: AspectRatio {
         if case .custom = targetRatio {
             if let width = Int(customWidth), let height = Int(customHeight), width > 0 && height > 0 {
@@ -41,14 +41,14 @@ struct ContentView: View {
     
     var body: some View {
         HSplitView {
-            // Batch-Liste (immer sichtbar)
+            // Batch list (always visible)
             BatchImageListView(batchManager: batchManager)
                 .onDrop(of: [.fileURL], delegate: BatchDropDelegate(batchManager: batchManager, onDrop: { urls in
                     loadBatchImages(from: urls)
                 }))
                 .frame(minWidth: 200, idealWidth: 250, maxWidth: 300)
             
-            // Canvas-Bereich
+            // Canvas area
             VStack(spacing: 0) {
                 // Top Navigation - Compact for smaller screens
                 HStack(spacing: 12) {
@@ -133,7 +133,7 @@ struct ContentView: View {
                         print("🎯 Canvas Focus changed: \(oldValue) -> \(newValue)")
                     }
                 } else {
-                    // Drag & Drop Bereich
+                    // Drag & drop area
                     ZStack {
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
@@ -156,7 +156,7 @@ struct ContentView: View {
                 }
             }
             
-            // Controls-Panel - Scrollbar bei Platzmangel
+            // Controls panel - scrollbar when space is limited
             ScrollView {
                 VStack(spacing: 0) {
                     ControlsView(
@@ -186,15 +186,15 @@ struct ContentView: View {
                         }
                     )
                     .onChange(of: targetRatio) { oldValue, newValue in
-                        // Wenn wir gerade Metadaten laden, nichts tun!
+                        // If we're currently loading metadata, do nothing!
                         guard !isLoadingFromMetadata else {
-                            print("   ⏭️ onChange(targetRatio) übersprungen - laden von Metadaten")
+                            print("   ⏭️ onChange(targetRatio) skipped - loading from metadata")
                             return
                         }
                         
-                        // Wenn auf Custom gewechselt wird, übernehme vorheriges Ratio
+                        // When switching to custom, adopt previous ratio
                         if case .custom = newValue {
-                            // Nur wenn vorher NICHT custom war
+                            // Only if not already custom
                             switch oldValue {
                             case .ratio16_9:
                                 customWidth = "16"
@@ -203,11 +203,11 @@ struct ContentView: View {
                                 customWidth = "1"
                                 customHeight = "1"
                             case .custom:
-                                break // Bereits custom, nichts tun
+                                break // Already custom, do nothing
                             }
                         }
                         
-                        // Crop-Box neu berechnen wenn Zielformat geändert wird
+                        // Recalculate crop box when target format changes
                         updateCropBoxForNewImage()
                     }
                     
@@ -233,11 +233,11 @@ struct ContentView: View {
             }
         }
         .onChange(of: batchManager.currentIndex) { oldValue, newValue in
-            // Wenn neues Bild ausgewählt wird
+            // When a new image is selected
             loadCurrentBatchImage()
         }
         .onAppear {
-            print("📱 ContentView appeared - Starte Keyboard Monitor")
+            print("📱 ContentView appeared - Starting keyboard monitor")
             keyboardMonitor.onSpacePressed = {
                 print("⌨️ Space-Handler von KeyboardMonitor aufgerufen")
                 toggleCompositionOverlay()
@@ -249,7 +249,7 @@ struct ContentView: View {
             keyboardMonitor.startMonitoring()
         }
         .onDisappear {
-            print("📱 ContentView disappeared - Stoppe Keyboard Monitor")
+            print("📱 ContentView disappeared - Stopping keyboard monitor")
             keyboardMonitor.stopMonitoring()
         }
     }
@@ -263,15 +263,15 @@ struct ContentView: View {
     private func openFile() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.jpeg, .heic, .png, .tiff]
-        panel.allowsMultipleSelection = true  // Immer Multi-Selection
+        panel.allowsMultipleSelection = true  // Always allow multi-selection
         
         if panel.runModal() == .OK {
-            // Filtere Video-Dateien aus
+            // Filter out video files
             let imageURLs = panel.urls.filter { url in
                 guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
                     return true
                 }
-                // Nur Bilder, keine Videos
+                // Only images, no videos
                 return type.conforms(to: .image) && !type.conforms(to: .movie) && !type.conforms(to: .video)
             }
             loadBatchImages(from: imageURLs)
@@ -279,18 +279,18 @@ struct ContentView: View {
     }
     
     private func loadBatchImages(from urls: [URL]) {
-        // Filtere Video-Dateien aus
+        // Filter out video files
         let imageURLs = urls.filter { url in
             guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
                 return true
             }
-            // Nur Bilder, keine Videos
+            // Only images, no videos
             return type.conforms(to: .image) && !type.conforms(to: .movie) && !type.conforms(to: .video)
         }
         
         let imageDatas = imageURLs.compactMap { ImageService.loadImage(from: $0) }
         
-        // MCU-Größe für JPEGs bestimmen
+        // Determine MCU size for JPEGs
         for (index, url) in imageURLs.enumerated() {
             if imageDatas[index].format == .jpeg {
                 imageDatas[index].mcuSize = JPEGService.detectMCUSize(for: url)
@@ -299,7 +299,7 @@ struct ContentView: View {
         
         batchManager.addImages(imageDatas)
         
-        // Lade erstes Bild
+        // Load first image
         if batchManager.hasImages {
             loadCurrentBatchImage()
         }
@@ -318,14 +318,14 @@ struct ContentView: View {
             activeOverlay = .none
         }
         
-        // WICHTIG: Prüfe zuerst gespeicherte Crop-Metadaten, DANN BatchItem cropSettings
+        // IMPORTANT: Check saved crop metadata first, THEN BatchItem cropSettings
         if let cropMeta = currentItem.imageData.cropMetadata {
-            // Gespeicherte Crop-Metadaten aus Bild laden (hat Priorität!)
-            print("📖 Lade gespeicherte Crop-Metadaten aus EXIF")
+            // Load saved crop metadata from image (has priority!)
+            print("📖 Loading saved crop metadata from EXIF")
             
             let imageSize = currentItem.imageData.pixelSize
             
-            // Konvertiere normalisierte Koordinaten zurück zu Pixeln
+            // Convert normalized coordinates back to pixels
             let pixelCropBox = CGRect(
                 x: cropMeta.originX * imageSize.width,
                 y: cropMeta.originY * imageSize.height,
@@ -333,25 +333,25 @@ struct ContentView: View {
                 height: cropMeta.height * imageSize.height
             )
             
-            // Crop-Modus übernehmen
+            // Adopt crop mode
             cropMode = CropMode(rawValue: cropMeta.cropMode) ?? .standard
             
-            // Target Ratio parsen und setzen - WICHTIG: Erst customWidth/Height, DANN targetRatio!
+            // Parse and set target ratio - IMPORTANT: First customWidth/Height, THEN targetRatio!
             if let parsedRatio = parseAspectRatioFromString(cropMeta.targetRatio) {
-                // Flag setzen um onChange-Handler zu unterdrücken
+                // Set flag to suppress onChange handlers
                 isLoadingFromMetadata = true
                 
-                // Bei Custom Ratio: ZUERST die Textfelder setzen
+                // For custom ratio: FIRST set the text fields
                 if case .custom(let w, let h) = parsedRatio {
                     customWidth = String(w)
                     customHeight = String(h)
-                    print("   → Custom Ratio erkannt: \(w):\(h)")
+                    print("   → Custom ratio detected: \(w):\(h)")
                 }
                 
-                // DANN erst das targetRatio setzen
+                // THEN set the targetRatio
                 targetRatio = parsedRatio
                 
-                // WICHTIG: Crop-Box setzen
+                // IMPORTANT: Set crop box
                 cropBox = pixelCropBox
                 
                 print("   → Crop-Box: \(pixelCropBox)")
@@ -359,16 +359,16 @@ struct ContentView: View {
                 print("   → Target Ratio: \(cropMeta.targetRatio) → \(parsedRatio.id)")
                 print("   → customWidth: \(customWidth), customHeight: \(customHeight)")
                 
-                // Flag mit kurzer Verzögerung zurücksetzen, damit alle Updates durchlaufen
+                // Reset flag with short delay to allow all updates to complete
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.isLoadingFromMetadata = false
-                    print("   ✅ Metadaten-Laden abgeschlossen")
+                    print("   ✅ Metadata loading completed")
                 }
             } else {
-                print("   ⚠️ Konnte Target Ratio nicht parsen: \(cropMeta.targetRatio)")
+                print("   ⚠️ Could not parse target ratio: \(cropMeta.targetRatio)")
             }
             
-            // Auch die CropSettings im BatchItem aktualisieren
+            // Also update the CropSettings in the BatchItem
             currentItem.cropSettings = CropSettings(
                 cropBox: pixelCropBox,
                 targetRatio: targetRatio,
@@ -376,25 +376,25 @@ struct ContentView: View {
                 originalRatio: currentItem.imageData.aspectRatioString
             )
         } else if let settings = currentItem.cropSettings {
-            // Lade Crop-Settings aus BatchItem (nur wenn keine Metadaten vorhanden)
-            print("📋 Lade Crop-Settings aus BatchItem")
+            // Load crop settings from BatchItem (only if no metadata present)
+            print("📋 Loading crop settings from BatchItem")
             cropBox = settings.cropBox
             targetRatio = settings.targetRatio
             cropMode = settings.mode
             
-            // Custom-Ratio Werte setzen
+            // Set custom ratio values
             if case .custom(let w, let h) = settings.targetRatio {
                 customWidth = String(w)
                 customHeight = String(h)
             }
         } else {
-            // Initiale Crop-Box berechnen
-            print("🆕 Keine gespeicherten Daten - berechne initiale Crop-Box")
+            // Calculate initial crop box
+            print("🆕 No saved data - calculating initial crop box")
             updateCropBoxForNewImage()
         }
     }
     
-    /// Parst AspectRatio aus String (z.B. "16:9", "1:1", "3:2")
+    /// Parses AspectRatio from string (e.g. "16:9", "1:1", "3:2")
     private func parseAspectRatioFromString(_ ratioString: String) -> AspectRatio? {
         if ratioString == "16:9" {
             return .ratio16_9
@@ -424,7 +424,7 @@ struct ContentView: View {
         
         cropBox = CGRect(origin: position, size: cropSize)
         
-        // MCU-Snapping falls aktiv
+        // MCU snapping if active
         if cropMode == .mcuSensitive, let mcuSize = displayImage.mcuSize {
             cropBox = CropEngine.snapToMCUGrid(
                 coordinates: cropBox,
@@ -485,7 +485,7 @@ struct ContentView: View {
         
         let displayImage = currentDisplayImage
         
-        // MCU-Snapping falls aktiv
+        // MCU snapping if active
         if cropMode == .mcuSensitive, let displayImage = displayImage, let mcuSize = displayImage.mcuSize {
             updatedBox = CropEngine.snapToMCUGrid(
                 coordinates: updatedBox,
@@ -494,14 +494,14 @@ struct ContentView: View {
             )
         }
         
-        // Validieren
+        // Validate
         if let displayImage = displayImage {
             updatedBox = CropEngine.validateCropBox(updatedBox, imageSize: displayImage.pixelSize)
         }
         
         cropBox = updatedBox
         
-        // Wenn Custom-Modus: customWidth und customHeight aktualisieren basierend auf tatsächlicher CropBox-Größe
+        // If custom mode: update customWidth and customHeight based on actual crop box size
         // Set flag to prevent onChange handlers from firing during this update
         if case .custom = targetRatio {
             isUpdatingFromDrag = true
@@ -514,7 +514,7 @@ struct ContentView: View {
             }
         }
         
-        // Settings im BatchManager speichern
+        // Save settings in BatchManager
         if let currentItem = batchManager.currentImage {
             let settings = CropSettings(
                 cropBox: updatedBox,
@@ -542,7 +542,7 @@ struct ContentView: View {
     }
     
     private func switchToCustomRatio() {
-        // Berechne Custom-Ratio aus aktueller Crop-Box
+        // Calculate custom ratio from current crop box
         let ratio = calculateImageAspectRatio(size: cropBox.size)
         
         // Set flag to prevent onChange handlers from triggering during this update
@@ -575,7 +575,7 @@ struct ContentView: View {
     }
 }
 
-/// Drag & Drop Delegate für Batch (mehrere Bilder)
+/// Drag & drop delegate for batch (multiple images)
 struct BatchDropDelegate: DropDelegate {
     @ObservedObject var batchManager: BatchImageManager
     let onDrop: ([URL]) -> Void
@@ -593,7 +593,7 @@ struct BatchDropDelegate: DropDelegate {
                 defer { group.leave() }
                 
                 if let error = error {
-                    print("Fehler beim Laden: \(error)")
+                    print("Error loading: \(error)")
                     return
                 }
                 

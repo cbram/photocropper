@@ -2,13 +2,13 @@
 //  CanvasView.swift
 //  PhotoCropper
 //
-//  AppKit-basierte Canvas-View für interaktive Crop-Box mit roter Umrandung
+//  AppKit-based canvas view for interactive crop box with red border
 //
 
 import SwiftUI
 import AppKit
 
-/// AppKit-View für Canvas mit Crop-Box
+/// AppKit view for canvas with crop box
 class CropCanvasView: NSView {
     var image: NSImage?
     var cropBox: CGRect = .zero
@@ -18,8 +18,8 @@ class CropCanvasView: NSView {
     var compositionOverlay: CompositionOverlay? = nil
     
     var onCropBoxChanged: ((CGRect) -> Void)?
-    var onRatioChanged: (() -> Void)?  // Callback wenn Ratio manuell geändert wird
-    var targetAspectRatio: CGFloat?  // Optional: gewünschtes Aspect Ratio (width/height)
+    var onRatioChanged: (() -> Void)?  // Callback when ratio is manually changed
+    var targetAspectRatio: CGFloat?  // Optional: desired aspect ratio (width/height)
     
     private var isDragging = false
     private var dragHandle: DragHandle?
@@ -42,14 +42,14 @@ class CropCanvasView: NSView {
         let context = NSGraphicsContext.current?.cgContext
         context?.clear(bounds)
         
-        // Bild skalieren und zentrieren
+        // Scale and center image
         let imageRect = calculateImageRect()
         context?.draw(image.cgImage(forProposedRect: nil, context: nil, hints: nil)!, in: imageRect)
         
-        // Overlay für ausgeschnittene Bereiche
+        // Overlay for cropped areas
         drawOverlay(in: imageRect, context: context!)
         
-        // Crop-Rect berechnen (wird für mehrere Dinge benötigt)
+        // Calculate crop rect (needed for multiple things)
         let scaleX = imageRect.width / imageSize.width
         let scaleY = imageRect.height / imageSize.height
         let cropRect = CGRect(
@@ -67,12 +67,12 @@ class CropCanvasView: NSView {
         // Crop-Box zeichnen (roter Rahmen)
         drawCropBox(in: imageRect, context: context!)
         
-        // Kompositions-Overlay zeichnen (optional) - INNERHALB der Crop-Box
+        // Draw composition overlay (optional) - INSIDE the crop box
         if let overlay = compositionOverlay {
             drawCompositionOverlay(overlay, in: cropRect, context: context!)
         }
         
-        // Handles NACH allem anderen zeichnen (damit sie immer sichtbar sind)
+        // Draw handles AFTER everything else (so they're always visible)
         drawHandles(in: cropRect, context: context!)
         
         // Info-Text zeichnen
@@ -82,14 +82,14 @@ class CropCanvasView: NSView {
     private func calculateImageRect() -> CGRect {
         guard image != nil else { return .zero }
         
-        // WICHTIG: imageSize verwenden (Pixel), nicht image.size (Points)!
+        // IMPORTANT: use imageSize (pixels), not image.size (points)!
         let imageAspect = imageSize.width / imageSize.height
         let viewAspect = bounds.width / bounds.height
         
         var imageRect: CGRect
         
         if imageAspect > viewAspect {
-            // Bild ist breiter → Breite bestimmt Größe (fill width)
+            // Image is wider → width determines size (fill width)
             let width = bounds.width
             let height = width / imageAspect
             imageRect = CGRect(
@@ -99,7 +99,7 @@ class CropCanvasView: NSView {
                 height: height
             )
         } else {
-            // Bild ist höher → Höhe bestimmt Größe (fill height)
+            // Image is taller → height determines size (fill height)
             let height = bounds.height
             let width = height * imageAspect
             imageRect = CGRect(
@@ -114,10 +114,10 @@ class CropCanvasView: NSView {
     }
     
     private func drawOverlay(in imageRect: CGRect, context: CGContext) {
-        // Crop-Box in View-Koordinaten umrechnen
+        // Convert crop box to view coordinates
         let scaleX = imageRect.width / imageSize.width
         let scaleY = imageRect.height / imageSize.height
-        // Y-Achse invertieren für NSView-Koordinatensystem
+        // Invert Y-axis for NSView coordinate system
         let cropRect = CGRect(
             x: imageRect.origin.x + cropBox.origin.x * scaleX,
             y: imageRect.origin.y + (imageSize.height - cropBox.origin.y - cropBox.height) * scaleY,
@@ -125,7 +125,7 @@ class CropCanvasView: NSView {
             height: cropBox.height * scaleY
         )
         
-        // Dunkelgraues Overlay über ausgeschnittene Bereiche
+        // Dark gray overlay over cropped areas
         context.setFillColor(NSColor.black.withAlphaComponent(0.6).cgColor)
         
         // Oben
@@ -167,7 +167,7 @@ class CropCanvasView: NSView {
     }
     
     private func drawCompositionOverlay(_ overlay: CompositionOverlay, in imageRect: CGRect, context: CGContext) {
-        // Helles Grau für bessere Sichtbarkeit
+        // Light gray for better visibility
         context.setStrokeColor(NSColor.lightGray.withAlphaComponent(0.7).cgColor)
         context.setLineWidth(1.5)
         
@@ -196,7 +196,7 @@ class CropCanvasView: NSView {
         let width = rect.width
         let height = rect.height
         
-        // Vertikale Linien bei 1/3 und 2/3
+        // Vertical lines at 1/3 and 2/3
         let x1 = rect.minX + width / 3
         let x2 = rect.minX + 2 * width / 3
         
@@ -208,7 +208,7 @@ class CropCanvasView: NSView {
         context.addLine(to: CGPoint(x: x2, y: rect.maxY))
         context.strokePath()
         
-        // Horizontale Linien bei 1/3 und 2/3
+        // Horizontal lines at 1/3 and 2/3
         let y1 = rect.minY + height / 3
         let y2 = rect.minY + 2 * height / 3
         
@@ -226,7 +226,7 @@ class CropCanvasView: NSView {
         let height = rect.height
         let goldenRatio: CGFloat = 0.618
         
-        // Horizontale Linien bei ~38.2% und ~61.8%
+        // Horizontal lines at ~38.2% and ~61.8%
         let y1 = rect.minY + height * (1 - goldenRatio)
         let y2 = rect.minY + height * goldenRatio
         
@@ -238,7 +238,7 @@ class CropCanvasView: NSView {
         context.addLine(to: CGPoint(x: rect.maxX, y: y2))
         context.strokePath()
         
-        // Vertikale Linien bei ~38.2% und ~61.8%
+        // Vertical lines at ~38.2% and ~61.8%
         let x1 = rect.minX + width * (1 - goldenRatio)
         let x2 = rect.minX + width * goldenRatio
         
@@ -384,7 +384,7 @@ class CropCanvasView: NSView {
         let scaleX = imageRect.width / imageSize.width
         let scaleY = imageRect.height / imageSize.height
         
-        // Y-Achse invertieren für NSView-Koordinatensystem
+        // Invert Y-axis for NSView coordinate system
         let cropRect = CGRect(
             x: imageRect.origin.x + cropBox.origin.x * scaleX,
             y: imageRect.origin.y + (imageSize.height - cropBox.origin.y - cropBox.height) * scaleY,
@@ -414,7 +414,7 @@ class CropCanvasView: NSView {
             height: labelSize.height + 4
         )
         
-        // Weißer Hintergrund für bessere Lesbarkeit
+        // White background for better readability
         context.setFillColor(NSColor.white.withAlphaComponent(0.9).cgColor)
         context.fill(labelRect)
         
@@ -427,16 +427,16 @@ class CropCanvasView: NSView {
     }
     
     private func drawHandles(in cropRect: CGRect, context: CGContext) {
-        let handleSize: CGFloat = 24  // Noch größer für besseres Greifen
+        let handleSize: CGFloat = 24  // Even larger for better grabbing
         let handleColor = NSColor.white
         let handleBorderColor = NSColor.red
         
-        // Sicherstellen dass Crop-Rect innerhalb der View-Bounds ist
+        // Ensure crop rect is within view bounds
         let visibleRect = bounds.intersection(cropRect)
         guard !visibleRect.isEmpty else { return }
         
-        // Eckpunkte (auf VISIBLE RECT, nicht auf vollständiger Crop-Rect!)
-        // Dies stellt sicher, dass Handles immer innerhalb der View sind
+        // Corner points (on VISIBLE RECT, not on complete crop rect!)
+        // This ensures handles are always within the view
         let corners = [
             CGPoint(x: visibleRect.minX, y: visibleRect.minY),  // Unten links
             CGPoint(x: visibleRect.maxX, y: visibleRect.minY),  // Unten rechts
@@ -452,7 +452,7 @@ class CropCanvasView: NSView {
             CGPoint(x: visibleRect.maxX, y: visibleRect.midY)   // Rechts
         ]
         
-        // Zeichne Ecken-Handles (größer)
+        // Draw corner handles (larger)
         for point in corners {
             let handleRect = CGRect(
                 x: point.x - handleSize / 2,
@@ -461,9 +461,9 @@ class CropCanvasView: NSView {
                 height: handleSize
             )
             
-            // Nur zeichnen wenn innerhalb der View-Bounds
+            // Only draw if within view bounds
             if bounds.intersects(handleRect) {
-                // Weißer Hintergrund
+                // White background
                 context.setFillColor(handleColor.cgColor)
                 context.fill(handleRect)
                 
@@ -475,8 +475,8 @@ class CropCanvasView: NSView {
         }
         
         // Zeichne Kanten-Handles (rechteckig, gut sichtbar)
-        let edgeHandleWidth: CGFloat = 40  // Noch breiter für besseres Greifen
-        let edgeHandleHeight: CGFloat = 14  // Noch höher
+        let edgeHandleWidth: CGFloat = 40  // Even wider for better grabbing
+        let edgeHandleHeight: CGFloat = 14  // Even taller
         
         for (index, point) in edges.enumerated() {
             var handleRect: CGRect
@@ -490,7 +490,7 @@ class CropCanvasView: NSView {
                     height: edgeHandleHeight
                 )
             } else {
-                // Links/Rechts: schmaler, höher
+                // Left/Right: narrower, taller
                 handleRect = CGRect(
                     x: point.x - edgeHandleHeight / 2,
                     y: point.y - edgeHandleWidth / 2,
@@ -499,9 +499,9 @@ class CropCanvasView: NSView {
                 )
             }
             
-            // Nur zeichnen wenn innerhalb der View-Bounds
+            // Only draw if within view bounds
             if bounds.intersects(handleRect) {
-                // Weißer Hintergrund
+                // White background
                 context.setFillColor(handleColor.cgColor)
                 context.fill(handleRect)
                 
@@ -542,7 +542,7 @@ class CropCanvasView: NSView {
         let location = convert(event.locationInWindow, from: nil)
         let delta = CGPoint(x: location.x - dragStartPoint.x, y: location.y - dragStartPoint.y)
         
-        // Bild-Rect für Koordinaten-Umrechnung
+        // Image rect for coordinate conversion
         let imageRect = calculateImageRect()
         let scaleX = imageSize.width / imageRect.width
         let scaleY = imageSize.height / imageRect.height
@@ -557,13 +557,13 @@ class CropCanvasView: NSView {
             
         case .topLeft:
             if let aspectRatio = targetAspectRatio {
-                // Mit Aspect Ratio: Breite führt
+                // With aspect ratio: width leads
                 newCropBox.origin.x += delta.x * scaleX
                 newCropBox.size.width -= delta.x * scaleX
                 newCropBox.size.height = newCropBox.size.width / aspectRatio
                 newCropBox.origin.y = dragStartCropBox.maxY - newCropBox.size.height
             } else {
-                // Ohne Aspect Ratio: Freie Anpassung
+                // Without aspect ratio: free adjustment
                 newCropBox.origin.x += delta.x * scaleX
                 newCropBox.origin.y -= delta.y * scaleY
                 newCropBox.size.width -= delta.x * scaleX
@@ -572,12 +572,12 @@ class CropCanvasView: NSView {
             
         case .topRight:
             if let aspectRatio = targetAspectRatio {
-                // Mit Aspect Ratio: Breite führt
+                // With aspect ratio: width leads
                 newCropBox.size.width += delta.x * scaleX
                 newCropBox.size.height = newCropBox.size.width / aspectRatio
                 newCropBox.origin.y = dragStartCropBox.maxY - newCropBox.size.height
             } else {
-                // Ohne Aspect Ratio: Freie Anpassung
+                // Without aspect ratio: free adjustment
                 newCropBox.origin.y -= delta.y * scaleY
                 newCropBox.size.width += delta.x * scaleX
                 newCropBox.size.height += delta.y * scaleY
@@ -585,12 +585,12 @@ class CropCanvasView: NSView {
             
         case .bottomLeft:
             if let aspectRatio = targetAspectRatio {
-                // Mit Aspect Ratio: Breite führt
+                // With aspect ratio: width leads
                 newCropBox.origin.x += delta.x * scaleX
                 newCropBox.size.width -= delta.x * scaleX
                 newCropBox.size.height = newCropBox.size.width / aspectRatio
             } else {
-                // Ohne Aspect Ratio: Freie Anpassung
+                // Without aspect ratio: free adjustment
                 newCropBox.origin.x += delta.x * scaleX
                 newCropBox.size.width -= delta.x * scaleX
                 newCropBox.size.height -= delta.y * scaleY
@@ -598,11 +598,11 @@ class CropCanvasView: NSView {
             
         case .bottomRight:
             if let aspectRatio = targetAspectRatio {
-                // Mit Aspect Ratio: Breite führt
+                // With aspect ratio: width leads
                 newCropBox.size.width += delta.x * scaleX
                 newCropBox.size.height = newCropBox.size.width / aspectRatio
             } else {
-                // Ohne Aspect Ratio: Freie Anpassung
+                // Without aspect ratio: free adjustment
                 newCropBox.size.width += delta.x * scaleX
                 newCropBox.size.height -= delta.y * scaleY
             }
@@ -642,24 +642,24 @@ class CropCanvasView: NSView {
             }
         }
         
-        // Validieren und begrenzen
+        // Validate and constrain
         newCropBox = CropEngine.validateCropBox(newCropBox, imageSize: imageSize)
         
-        // WICHTIG: Nach Validierung Aspect Ratio nochmal korrigieren
-        // Falls die Box an Bildgrenzen stößt, müssen wir die andere Dimension anpassen
+        // IMPORTANT: Correct aspect ratio again after validation
+        // If the box hits image boundaries, we need to adjust the other dimension
         if let aspectRatio = targetAspectRatio {
-            // Prüfen welche Dimension am Limit ist
+            // Check which dimension is at the limit
             let widthAtLimit = newCropBox.size.width >= imageSize.width - 1
             let heightAtLimit = newCropBox.size.height >= imageSize.height - 1
             
             if widthAtLimit && !heightAtLimit {
-                // Breite ist am Limit -> Höhe anpassen
+                // Width is at limit -> adjust height
                 newCropBox.size.height = min(newCropBox.size.width / aspectRatio, imageSize.height)
             } else if heightAtLimit && !widthAtLimit {
-                // Höhe ist am Limit -> Breite anpassen
+                // Height is at limit -> adjust width
                 newCropBox.size.width = min(newCropBox.size.height * aspectRatio, imageSize.width)
             } else if widthAtLimit && heightAtLimit {
-                // Beide am Limit -> Aspect Ratio kann nicht gehalten werden, kleinere Dimension gewinnt
+                // Both at limit -> aspect ratio cannot be maintained, smaller dimension wins
                 let maxWidthForHeight = newCropBox.size.height * aspectRatio
                 let maxHeightForWidth = newCropBox.size.width / aspectRatio
                 
@@ -674,18 +674,18 @@ class CropCanvasView: NSView {
             newCropBox = CropEngine.validateCropBox(newCropBox, imageSize: imageSize)
         }
         
-        // Bei Kanten/Ecken-Drag: Signal für Custom-Ratio senden
-        // ABER NUR wenn kein targetAspectRatio gesetzt ist (sonst würden wir das Lock aufheben!)
+        // For edge/corner drag: send signal for custom ratio
+        // BUT ONLY if no targetAspectRatio is set (otherwise we would break the lock!)
         if handle != .center && targetAspectRatio == nil {
             onRatioChanged?()
         }
         
         cropBox = newCropBox
         
-        // Display IMMER sofort updaten (kein Throttling für visuelle Darstellung)
+        // Display ALWAYS update immediately (no throttling for visual representation)
         needsDisplay = true
         
-        // Nur Callback throttlen (für Performance bei Slider-Updates etc.)
+        // Only throttle callback (for performance with slider updates etc.)
         let now = Date()
         if now.timeIntervalSince(lastDisplayUpdate) >= displayThrottleInterval {
             onCropBoxChanged?(cropBox)
@@ -696,7 +696,7 @@ class CropCanvasView: NSView {
     override func mouseUp(with event: NSEvent) {
         isDragging = false
         dragHandle = nil
-        // Final display update UND Callback nach Drag-Ende
+        // Final display update AND callback after drag end
         onCropBoxChanged?(cropBox)
         needsDisplay = true
     }
@@ -705,7 +705,7 @@ class CropCanvasView: NSView {
         let imageRect = calculateImageRect()
         let scaleX = imageRect.width / imageSize.width
         let scaleY = imageRect.height / imageSize.height
-        // Y-Achse invertieren für NSView-Koordinatensystem
+        // Invert Y-axis for NSView coordinate system
         let cropRect = CGRect(
             x: imageRect.origin.x + cropBox.origin.x * scaleX,
             y: imageRect.origin.y + (imageSize.height - cropBox.origin.y - cropBox.height) * scaleY,
@@ -713,14 +713,14 @@ class CropCanvasView: NSView {
             height: cropBox.height * scaleY
         )
         
-        // WICHTIG: Verwende visibleRect für Hit-Testing (wie beim Zeichnen!)
+        // IMPORTANT: Use visibleRect for hit testing (as in drawing!)
         let visibleRect = bounds.intersection(cropRect)
         guard !visibleRect.isEmpty else { return nil }
         
-        let handleSize: CGFloat = 24  // Größer für bessere Erkennung
-        let edgeSize: CGFloat = 30  // Größerer Bereich für Kanten
+        let handleSize: CGFloat = 24  // Larger for better detection
+        let edgeSize: CGFloat = 30  // Larger area for edges
         
-        // Ecken prüfen (Priorität vor Kanten) - auf VISIBLE RECT
+        // Check corners (priority over edges) - on VISIBLE RECT
         let corners = [
             CGPoint(x: visibleRect.minX, y: visibleRect.minY),  // Unten links
             CGPoint(x: visibleRect.maxX, y: visibleRect.minY),  // Unten rechts
@@ -741,7 +741,7 @@ class CropCanvasView: NSView {
             return .topRight
         }
         
-        // Kanten prüfen (mit größerem Bereich) - auf VISIBLE RECT
+        // Check edges (with larger area) - on VISIBLE RECT
         // Obere Kante
         if abs(point.y - visibleRect.maxY) < edgeSize && 
            point.x >= visibleRect.minX && point.x <= visibleRect.maxX {
@@ -763,7 +763,7 @@ class CropCanvasView: NSView {
             return .right
         }
         
-        // Mitte prüfen (auf vollständiger cropRect für Drag-Funktionalität)
+        // Check center (on complete cropRect for drag functionality)
         if cropRect.contains(point) {
             return .center
         }
@@ -773,7 +773,7 @@ class CropCanvasView: NSView {
     
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        // Cursor-Updates für Drag-Handles könnten hier implementiert werden
+        // Cursor updates for drag handles could be implemented here
     }
 }
 
@@ -785,7 +785,7 @@ extension CGPoint {
     }
 }
 
-/// SwiftUI-Wrapper für CropCanvasView
+/// SwiftUI wrapper for CropCanvasView
 struct CanvasView: NSViewRepresentable {
     @Binding var image: NSImage?
     @Binding var cropBox: CGRect
@@ -793,7 +793,7 @@ struct CanvasView: NSViewRepresentable {
     var showMCUGrid: Bool
     var mcuSize: CGSize
     var compositionOverlay: CompositionOverlay?
-    var targetAspectRatio: CGFloat?  // Für Aspect-Ratio-Lock beim Dragging
+    var targetAspectRatio: CGFloat?  // For aspect ratio lock during dragging
     var onCropBoxChanged: ((CGRect) -> Void)?
     var onRatioChanged: (() -> Void)?
     

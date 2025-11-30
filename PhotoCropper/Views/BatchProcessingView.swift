@@ -2,7 +2,7 @@
 //  BatchProcessingView.swift
 //  PhotoCropper
 //
-//  Batch-Processing für mehrere Bilder
+//  Batch processing for multiple images
 //
 
 import SwiftUI
@@ -41,7 +41,7 @@ struct BatchProcessingView: View {
                             .frame(height: 300)
                     }
                     
-                    // Crop-Einstellungen (vereinfacht für Batch)
+                    // Crop settings (simplified for batch)
                     VStack {
                         Picker("Zielformat", selection: $targetRatio) {
                             Text("16:9").tag(AspectRatio.ratio16_9)

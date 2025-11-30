@@ -5,11 +5,11 @@
 ## User settings
 xcuserdata/
 
-## compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
+## Compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
 *.xcscmblueprint
 *.xccheckout
 
-## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
+## Compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
 build/
 DerivedData/
 *.moved-aside
@@ -91,11 +91,87 @@ iOSInjectionProject/
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# Icon must end with two \r
+Icon
+
+# Thumbnails
+._*
+Thumbs.db
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
 
 # Temporary files
 *.swp
+*.swo
+*~
+.*.swp
 *~.nib
 
-# Setup scripts (can be regenerated)
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Documentation build artifacts
+docs/build/
+.jazzy/
+*.generated.md
+
+# Distribution
+dist/
+*.app
+*.dmg
+*.pkg
+
+# Scripts (generated/temporary)
 setup_xcode.sh
 create_xcode_project.sh
+fix_icon.sh
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Python (if used for tooling)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# Testing
+*.xcresult
+*.gcov
+*.gcda
+*.gcno
+
+# Personal notes
+NOTES.md
+TODO.md
+SCRATCH.md

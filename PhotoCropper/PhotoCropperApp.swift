@@ -2,7 +2,7 @@
 //  PhotoCropperApp.swift
 //  PhotoCropper
 //
-//  Haupt-App-Entry-Point
+//  Main app entry point
 //
 
 import SwiftUI
@@ -19,7 +19,7 @@ struct PhotoCropperApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("Bild öffnen...") {
-                    // Wird von ContentView gehandhabt
+                    // Handled by ContentView
                 }
                 .keyboardShortcut("o", modifiers: .command)
                 

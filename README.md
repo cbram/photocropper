@@ -1,177 +1,244 @@
-# PhotoCropper - Mac JPEG/HEIC Lossless Crop Tool
+# PhotoCropper - macOS JPEG/HEIC Lossless Crop Tool
 
-Native macOS SwiftUI-Anwendung für verlustfreies Cropping von JPEG/HEIC-Bildern mit Metadaten-Speicherung.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/platform-macOS%2012.0+-blue.svg)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-5.9-orange.svg)](https://swift.org)
+
+Native macOS SwiftUI application for lossless cropping of JPEG/HEIC images with metadata preservation.
 
 ## Features
 
-- ✅ Unterstützung für beliebige Bildformate (JPEG, HEIC, PNG, TIFF)
-- ✅ Flexible Input-Ratios (3:2, 16:9, 1:1, 21:9, Hochkant, etc.)
-- ✅ Zielformat-Auswahl: 16:9, 1:1, Benutzerdefiniert
-- ✅ MCU-sensitives Cropping für JPEG (verlustfrei)
-- ✅ Standard-Cropping als Fallback
-- ✅ Interaktive GUI mit rotem Crop-Rahmen
-- ✅ MCU-Grid-Visualisierung (optional)
-- ✅ Metadaten-Speicherung (EXIF DefaultCropOrigin/Size + Custom XMP Tags)
-- ✅ **Automatisches Laden gespeicherter Crop-Koordinaten** - Bilder mit bereits gespeicherten Crop-Daten werden erkannt und die Crop-Box wird automatisch positioniert
-- ✅ **Visuelle Kennzeichnung** - Bilder mit gespeicherten Crop-Metadaten werden in der Liste mit einem blauen Badge markiert
-- ✅ Automatische Dateinamen-Generierung aus EXIF-Datum
-- ✅ Batch-Processing für mehrere Bilder
-- ✅ HEIC zu JPEG Konvertierung (optional)
-- ✅ **Responsive UI** - Optimiert für verschiedene Bildschirmgrößen (min. 900×600 Pixel)
+- ✅ Support for various image formats (JPEG, HEIC, PNG, TIFF)
+- ✅ Flexible aspect ratios (3:2, 16:9, 1:1, 21:9, portrait, etc.)
+- ✅ Target format selection: 16:9, 1:1, Custom
+- ✅ MCU-sensitive cropping for JPEG (lossless)
+- ✅ Standard cropping as fallback
+- ✅ Interactive GUI with red crop frame
+- ✅ MCU grid visualization (optional)
+- ✅ Metadata storage (EXIF DefaultCropOrigin/Size + Custom XMP Tags)
+- ✅ **Automatic loading of saved crop coordinates** - Images with saved crop data are detected and the crop box is automatically positioned
+- ✅ **Visual indicators** - Images with saved crop metadata are marked with a blue badge in the list
+- ✅ Automatic filename generation from EXIF date
+- ✅ Batch processing for multiple images
+- ✅ HEIC to JPEG conversion (optional)
+- ✅ **Responsive UI** - Optimized for various screen sizes (min. 900×600 pixels)
 
-## Voraussetzungen
+## Screenshots
 
-- macOS 12.0 oder höher
-- Xcode 14.0 oder höher
-- jpegtran (für MCU-sensitives Cropping): `brew install jpeg-turbo`
+*Coming soon - Add screenshots of your app in action*
+
+## Prerequisites
+
+- macOS 12.0 or higher
+- Xcode 14.0 or higher
+- jpegtran (for MCU-sensitive cropping): `brew install jpeg-turbo`
+- exiftool (for metadata manipulation): `brew install exiftool`
 
 ## Installation
 
-1. Projekt öffnen:
+### Building from Source
+
+1. Clone the repository:
+```bash
+git clone https://github.com/YOUR_USERNAME/PhotoCropper.git
+cd PhotoCropper
+```
+
+2. Open the project:
 ```bash
 open PhotoCropper.xcodeproj
 ```
 
-2. In Xcode:
+3. In Xcode:
    - Product → Build (⌘B)
    - Product → Run (⌘R)
 
-## App bauen und finden
+### Building Release Version
 
-### Option 1: In Xcode bauen
+#### Option 1: In Xcode
 
-1. **Xcode öffnen** und das Projekt `PhotoCropper.xcodeproj` öffnen
-2. **Product → Scheme → PhotoCropper** wählen
-3. **Product → Destination → My Mac** wählen
-4. **Release-Build erstellen:**
+1. **Open Xcode** and open the project `PhotoCropper.xcodeproj`
+2. **Product → Scheme → PhotoCropper** select
+3. **Product → Destination → My Mac** select
+4. **Create Release build:**
    - Product → Scheme → Edit Scheme...
-   - Run → Build Configuration → **Release** wählen
+   - Run → Build Configuration → **Release** select
    - OK
-5. **Build:** ⌘B (oder Product → Build)
-6. **Run:** ⌘R (oder Product → Run)
+5. **Build:** ⌘B (or Product → Build)
+6. **Run:** ⌘R (or Product → Run)
 
-### Option 2: Über Terminal bauen
+#### Option 2: Via Terminal
 
 ```bash
-cd /Users/chbram/Documents/Arduino/PhotoCropper
+cd PhotoCropper
 xcodebuild -project PhotoCropper.xcodeproj -scheme PhotoCropper -configuration Release clean build
 ```
 
-### Wo findest du die kompilierte App?
+### Locating the Compiled App
 
-Die App liegt normalerweise hier:
+The app is typically located at:
 
 ```
 ~/Library/Developer/Xcode/DerivedData/PhotoCropper-*/Build/Products/Release/PhotoCropper.app
 ```
 
-**Im Finder:**
-1. Finder öffnen
-2. ⌘⇧G (Gehe zu Ordner)
-3. Pfad eingeben: `~/Library/Developer/Xcode/DerivedData`
-4. Den Ordner `PhotoCropper-*` öffnen
-5. Navigiere zu: `Build/Products/Release/`
-6. Die `PhotoCropper.app` findest du dort
+**In Finder:**
+1. Open Finder
+2. ⌘⇧G (Go to Folder)
+3. Enter path: `~/Library/Developer/Xcode/DerivedData`
+4. Open the `PhotoCropper-*` folder
+5. Navigate to: `Build/Products/Release/`
+6. You'll find `PhotoCropper.app` there
 
-**Über Terminal:**
+**Via Terminal:**
 ```bash
-# Finde die App automatisch
+# Find the app automatically
 find ~/Library/Developer/Xcode/DerivedData -name "PhotoCropper.app" -path "*/Release/*" | head -1
 ```
 
-### App für die Verteilung vorbereiten
+### Preparing the App for Distribution
 
-Um die App an einem festen Ort zu haben:
+To have the app at a fixed location:
 
 ```bash
-# Erstelle einen dist-Ordner
+# Create dist folder
 mkdir -p dist
 
-# Kopiere die App dorthin
+# Copy the app there
 cp -R ~/Library/Developer/Xcode/DerivedData/PhotoCropper-*/Build/Products/Release/PhotoCropper.app dist/
 ```
 
-Die App ist dann in `dist/PhotoCropper.app` verfügbar und kann einfach weitergegeben werden.
+The app is then available at `dist/PhotoCropper.app` and can be easily shared.
 
-## Verwendung
+## Usage
 
-1. **Bild öffnen**: Datei → Öffnen oder Drag & Drop
-2. **Zielformat wählen**: 16:9, 1:1 oder Benutzerdefiniert
-3. **Cropping-Modus**: MCU-sensitiv (Lossless) oder Standard
-4. **Crop-Box anpassen**: Interaktiv per Maus ziehen
-5. **Speichern**: Metadaten werden in EXIF/XMP gespeichert
+1. **Open image**: File → Open or Drag & Drop
+2. **Select target format**: 16:9, 1:1, or Custom
+3. **Cropping mode**: MCU-sensitive (Lossless) or Standard
+4. **Adjust crop box**: Interactively drag with mouse
+5. **Save**: Metadata is saved in EXIF/XMP
 
-## Projektstruktur
+### Keyboard Shortcuts
+
+- **⌘O** - Open image
+- **Space** - Toggle composition overlays
+- **Enter** - Mark as done and move to next image
+- **⌘⇧W** - Close all images
+
+## Project Structure
 
 ```
 PhotoCropper/
 ├── Models/
-│   ├── AspectRatio.swift          # Seitenverhältnis-Berechnungen
-│   ├── CropSettings.swift         # Crop-Einstellungen
-│   ├── ImageData.swift            # Bilddaten mit Metadaten
-│   ├── ExifData.swift             # EXIF/XMP-Strukturen
-│   ├── BatchImageItem.swift       # Einzelnes Batch-Element
-│   ├── BatchImageManager.swift    # Batch-Verwaltung
-│   ├── CompositionOverlay.swift   # Kompositionshilfen
-│   └── OverlayGuide.swift         # Unified Overlay System
+│   ├── AspectRatio.swift          # Aspect ratio calculations
+│   ├── CropSettings.swift         # Crop settings
+│   ├── ImageData.swift            # Image data with metadata
+│   ├── ExifData.swift             # EXIF/XMP structures
+│   ├── BatchImageItem.swift       # Individual batch element
+│   ├── BatchImageManager.swift    # Batch management
+│   ├── CompositionOverlay.swift   # Composition guides
+│   └── OverlayGuide.swift         # Unified overlay system
 ├── Views/
-│   ├── ContentView.swift          # Haupt-View
-│   ├── CanvasView.swift           # Bild-Canvas (AppKit)
-│   ├── ControlsView.swift         # Steuerelemente
-│   ├── PreviewView.swift          # Vorschau
-│   ├── ExportView.swift           # Export-Dialog
-│   ├── InfoPanel.swift            # Info-Panel
-│   ├── BatchImageListView.swift   # Batch-Liste
-│   └── BatchExportView.swift      # Batch-Export
+│   ├── ContentView.swift          # Main view
+│   ├── CanvasView.swift           # Image canvas (AppKit)
+│   ├── ControlsView.swift         # Controls
+│   ├── PreviewView.swift          # Preview
+│   ├── ExportView.swift           # Export dialog
+│   ├── InfoPanel.swift            # Info panel
+│   ├── BatchImageListView.swift   # Batch list
+│   └── BatchExportView.swift      # Batch export
 ├── Services/
-│   ├── ImageService.swift         # Bild-Laden & Format-Erkennung
-│   ├── ImageCropService.swift     # Standard-Cropping (alle Formate)
-│   ├── JPEGService.swift          # JPEG MCU-Cropping (lossless)
-│   ├── MetadataService.swift      # Metadaten-Facade
-│   ├── MetadataReader.swift       # Metadaten lesen
-│   ├── MetadataWriter.swift       # Metadaten schreiben
-│   ├── CropEngine.swift           # Crop-Berechnungen
-│   └── ExifDateParser.swift       # EXIF-Datum-Parsing
+│   ├── ImageService.swift         # Image loading & format detection
+│   ├── ImageCropService.swift     # Standard cropping (all formats)
+│   ├── JPEGService.swift          # JPEG MCU cropping (lossless)
+│   ├── MetadataService.swift      # Metadata facade
+│   ├── MetadataReader.swift       # Metadata reading
+│   ├── MetadataWriter.swift       # Metadata writing
+│   ├── CropEngine.swift           # Crop calculations
+│   └── ExifDateParser.swift       # EXIF date parsing
 └── Utilities/
-    ├── CoordinateMapper.swift     # Koordinaten-Transformationen
-    ├── FileManager+Extensions.swift # Datei-Operationen
-    ├── KeyboardMonitor.swift      # Tastatur-Events
-    ├── ProcessExecutor.swift      # Externe Befehle (posix_spawn)
-    └── NSImage+Extensions.swift   # Bild-Hilfsfunktionen
+    ├── CoordinateMapper.swift     # Coordinate transformations
+    ├── FileManager+Extensions.swift # File operations
+    ├── KeyboardMonitor.swift      # Keyboard events
+    ├── ProcessExecutor.swift      # External commands (posix_spawn)
+    └── NSImage+Extensions.swift   # Image helpers
 ```
 
-## Technische Details
+## Technical Details
 
-- **SwiftUI + AppKit Hybrid**: Canvas verwendet AppKit für bessere Performance
-- **jpegtran Integration**: Shell-Command für verlustfreies JPEG-Cropping (via ProcessExecutor)
-- **exiftool Integration**: Metadaten-Manipulation ohne Bild-Re-Encoding
-- **ImageIO Framework**: Für Bild-Laden und Metadaten
+- **SwiftUI + AppKit Hybrid**: Canvas uses AppKit for better performance
+- **jpegtran Integration**: Shell command for lossless JPEG cropping (via ProcessExecutor)
+- **exiftool Integration**: Metadata manipulation without image re-encoding
+- **ImageIO Framework**: For image loading and metadata
 - **Clean Code Architecture**: 
   - Separation of Concerns (Models/Services/Views/Utilities)
   - Single Responsibility Principle
   - Dependency Injection
-  - Comprehensive error handling mit Result types
-  - Vollständige Swift DocC Dokumentation
-- **Metadaten-Strategie**:
-  - Reader/Writer/Facade Pattern für Metadaten-Services
-  - 3-Pass Strategy für exiftool (Delete → Write → Sync)
-  - Normalisierte Koordinaten (0.0-1.0) für Auflösungsunabhängigkeit
+  - Comprehensive error handling with Result types
+  - Complete Swift DocC documentation
+- **Metadata Strategy**:
+  - Reader/Writer/Facade Pattern for metadata services
+  - 3-Pass Strategy for exiftool (Delete → Write → Sync)
+  - Normalized coordinates (0.0-1.0) for resolution independence
 
-## Bekannte Einschränkungen
+## Metadata Storage
 
-- MCU-Größen-Erkennung ist vereinfacht (Standard: 8x8 für JPEGs)
-- Für präzise MCU-Erkennung wäre libjpeg direkt nötig
-- HEIC unterstützt kein MCU-Cropping (verwendet Re-Encoding)
-- PNG/TIFF verwenden immer Re-Encoding (kein lossless Crop verfügbar)
-- Keine automatisierten Tests (nur manuelle Tests)
+### EXIF Tags (Standard)
+- `DefaultCropOrigin`: Normalized crop origin [x, y]
+- `DefaultCropSize`: Normalized crop size [width, height]
 
-## Weitere Dokumentation
+### XMP Tags (Adobe Lightroom Compatible)
+- `XMP-crs:CropTop`: Normalized Y coordinate
+- `XMP-crs:CropLeft`: Normalized X coordinate
+- `XMP-crs:CropBottom`: Normalized Y + height
+- `XMP-crs:CropRight`: Normalized X + width
 
-- **CLAUDE.md**: Zentrale Projektdokumentation und Architektur-Übersicht
-- **REFACTORING_PLAN.md**: Detaillierter Plan des durchgeführten Refactorings (Steps 1-13)
-- Alle Services und Models sind mit Swift DocC dokumentiert
+### Custom Tags (PhotoCropper Specific)
+Stored in `XMP-dc:Subject` as structured tags:
+- `PhotoCropper:CropMode`: MCU-Sensitive or Standard
+- `PhotoCropper:TargetRatio`: Target aspect ratio (e.g., "16:9")
+- `PhotoCropper:OriginalRatio`: Original image ratio
+- `PhotoCropper:CropOriginX`: Normalized X origin
+- `PhotoCropper:CropOriginY`: Normalized Y origin
+- `PhotoCropper:CropWidth`: Normalized width
+- `PhotoCropper:CropHeight`: Normalized height
 
-## Lizenz
+All coordinates are stored normalized (0.0 to 1.0) to be resolution-independent.
 
-MIT License
+## Known Limitations
 
+- MCU size detection is simplified (standard: 8x8 for JPEGs)
+- For precise MCU detection, direct libjpeg would be necessary
+- HEIC does not support MCU cropping (uses re-encoding)
+- PNG/TIFF always use re-encoding (no lossless crop available)
+- No automated tests (manual testing only)
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## Documentation
+
+- **CLAUDE.md**: Central project documentation and architecture overview
+- **REFACTORING_PLAN.md**: Detailed plan of the refactoring performed (Steps 1-13)
+- All services and models are documented with Swift DocC
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- **jpegtran** from jpeg-turbo for lossless JPEG manipulation
+- **exiftool** by Phil Harvey for comprehensive metadata handling
+- Apple's ImageIO framework for robust image handling
+
+## Support
+
+If you encounter any issues or have questions:
+- Open an [Issue](https://github.com/cbram/photocropper/issues)
+- Check existing [Discussions](https://github.com/cbram/photocropper/discussions)
+
+---
+
+**Made with ❤️ for photographers who need precise, lossless image cropping**

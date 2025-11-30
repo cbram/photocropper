@@ -35,7 +35,7 @@ struct PreviewView: View {
                             .frame(width: previewSize.width, height: previewSize.height)
                             .clipped()
                         
-                        // Rahmen um das Preview
+                        // Border around the preview
                         Rectangle()
                             .stroke(currentRatio == targetRatioValue ? Color.green : Color.orange, lineWidth: 2)
                             .frame(width: previewSize.width, height: previewSize.height)
@@ -104,12 +104,12 @@ struct PreviewView: View {
         let availableAspect = availableSize.width / availableSize.height
         
         if cropAspect > availableAspect {
-            // Crop ist breiter → Breite bestimmt Größe
+            // Crop is wider → width determines size
             let width = availableSize.width
             let height = width / cropAspect
             return CGSize(width: width, height: height)
         } else {
-            // Crop ist höher → Höhe bestimmt Größe
+            // Crop is taller → height determines size
             let height = availableSize.height
             let width = height * cropAspect
             return CGSize(width: width, height: height)
