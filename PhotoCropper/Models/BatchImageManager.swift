@@ -2,209 +2,222 @@
 //  BatchImageManager.swift
 //  PhotoCropper
 //
-//  Verwaltet mehrere Bilder für Batch-Verarbeitung
+//  Manages multiple images for batch processing workflow
 //
 
 import Foundation
 import SwiftUI
 import Combine
 
-/// Repräsentiert ein Bild im Batch mit seinem Crop-Status
-class BatchImageItem: Identifiable, ObservableObject {
-    let id = UUID()
-    @Published var imageData: ImageData
-    @Published var cropSettings: CropSettings?
-    @Published var status: BatchItemStatus = .pending
-    @Published var thumbnail: NSImage?
-    
-    enum BatchItemStatus: Equatable {
-        case pending        // Noch nicht bearbeitet
-        case editing        // Gerade in Bearbeitung
-        case ready          // Crop-Einstellungen fertig
-        case exported       // Bereits exportiert
-        case error(String)  // Fehler aufgetreten
-    }
-    
-    init(imageData: ImageData) {
-        self.imageData = imageData
-        // Default Crop-Einstellungen
-        let cropSize = AspectRatio.ratio16_9.calculateCropSize(for: imageData.pixelSize)
-        let position = AspectRatio.ratio16_9.calculateDefaultPosition(for: imageData.pixelSize, cropSize: cropSize)
-        
-        self.cropSettings = CropSettings(
-            cropBox: CGRect(origin: position, size: cropSize),
-            targetRatio: .ratio16_9,
-            mode: .mcuSensitive,
-            originalRatio: imageData.aspectRatioString
-        )
-        
-        // Thumbnail generieren
-        generateThumbnail()
-    }
-    
-    private func generateThumbnail() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            
-            if let thumbnail = self.imageData.image?.resized(to: CGSize(width: 100, height: 100)) {
-                DispatchQueue.main.async {
-                    self.thumbnail = thumbnail
-                }
-            }
-        }
-    }
-    
-    var statusIcon: String {
-        switch status {
-        case .pending: return "circle"
-        case .editing: return "circle.fill"
-        case .ready: return "checkmark.circle"
-        case .exported: return "checkmark.circle.fill"
-        case .error: return "xmark.circle.fill"
-        }
-    }
-    
-    var statusColor: Color {
-        switch status {
-        case .pending: return .gray
-        case .editing: return .blue
-        case .ready: return .orange
-        case .exported: return .green
-        case .error: return .red
-        }
-    }
-}
+// MARK: - Batch Image Manager
 
-/// Manager für Batch-Verarbeitung mehrerer Bilder
+/// Manager for batch processing of multiple images
+///
+/// This class coordinates the batch processing workflow, managing a collection of
+/// images, tracking the current selection, and providing methods for navigation
+/// and status management.
+///
+/// Example usage:
+/// ```swift
+/// let manager = BatchImageManager()
+/// manager.addImages(imageDatas)
+/// manager.selectImage(at: 0)
+/// manager.updateCurrentCropSettings(newSettings)
+/// manager.markCurrentAsReadyAndNext()
+/// ```
 class BatchImageManager: ObservableObject {
+    
+    // MARK: - Published Properties
+    
+    /// Array of all images in the batch
     @Published var images: [BatchImageItem] = []
+    
+    /// Index of the currently selected image
     @Published var currentIndex: Int = 0
+    
+    /// Indicates whether batch processing is in progress
     @Published var isProcessing: Bool = false
     
+    // MARK: - Computed Properties
+    
+    /// The currently selected image item, if any
     var currentImage: BatchImageItem? {
-        guard currentIndex >= 0 && currentIndex < images.count else { return nil }
+        guard isValidIndex(currentIndex) else { return nil }
         return images[currentIndex]
     }
     
+    /// Indicates whether any images are loaded
     var hasImages: Bool {
         !images.isEmpty
     }
     
+    /// Indicates whether all images are ready for export
+    ///
+    /// An image is considered ready if its status is `.ready` or `.exported`.
     var allReady: Bool {
-        images.allSatisfy { item in
-            if case .ready = item.status { return true }
-            if case .exported = item.status { return true }
-            return false
-        }
+        !images.isEmpty && images.allSatisfy { $0.isReadyForExport }
     }
     
+    /// Number of images ready for export
     var readyCount: Int {
-        images.filter { item in
-            if case .ready = item.status { return true }
-            if case .exported = item.status { return true }
-            return false
-        }.count
+        images.filter { $0.isReadyForExport }.count
     }
     
-    /// Fügt neue Bilder hinzu
+    /// Total number of images in the batch
+    var totalCount: Int {
+        images.count
+    }
+    
+    /// Progress as a percentage (0.0 to 1.0)
+    var progress: Double {
+        guard !images.isEmpty else { return 0.0 }
+        return Double(readyCount) / Double(totalCount)
+    }
+    
+    // MARK: - Image Management
+    
+    /// Adds new images to the batch
+    ///
+    /// - Parameter imageDatas: Array of image data to add
+    ///
+    /// - Note: If this is the first set of images, the first image is automatically selected.
     func addImages(_ imageDatas: [ImageData]) {
         let newItems = imageDatas.map { BatchImageItem(imageData: $0) }
+        let wasEmpty = images.isEmpty
+        
         images.append(contentsOf: newItems)
         
-        // Wenn das erste Bild, setze es als aktuell
-        if images.count == newItems.count {
+        // If this was the first batch, select the first image
+        if wasEmpty && !images.isEmpty {
             selectImage(at: 0)
         }
+        
+        print("📥 Added \(newItems.count) images to batch (total: \(images.count))")
     }
     
-    /// Wählt ein Bild aus der Liste
-    func selectImage(at index: Int) {
-        guard index >= 0 && index < images.count else { return }
+    /// Removes an image from the batch
+    ///
+    /// - Parameter index: Index of the image to remove
+    ///
+    /// - Note: If the removed image was selected, the selection is adjusted to
+    ///   remain valid. The current index may change after removal.
+    func removeImage(at index: Int) {
+        guard isValidIndex(index) else {
+            print("⚠️ Cannot remove image at invalid index \(index)")
+            return
+        }
         
-        // Altes Bild Status aktualisieren
+        let filename = images[index].filename
+        images.remove(at: index)
+        
+        // Adjust current index if necessary
+        if currentIndex >= images.count {
+            currentIndex = max(0, images.count - 1)
+        }
+        
+        print("🗑️ Removed image: \(filename) (remaining: \(images.count))")
+    }
+    
+    /// Removes all images from the batch
+    func clear() {
+        let count = images.count
+        images.removeAll()
+        currentIndex = 0
+        
+        print("🗑️ Cleared all images (removed: \(count))")
+    }
+    
+    // MARK: - Navigation
+    
+    /// Selects an image at the specified index
+    ///
+    /// - Parameter index: Index of the image to select
+    ///
+    /// - Note: Updates status of the previously selected image to `.ready` if it
+    ///   was `.editing`. Sets the newly selected image status to `.editing` if
+    ///   it was `.pending`.
+    func selectImage(at index: Int) {
+        guard isValidIndex(index) else {
+            print("⚠️ Cannot select image at invalid index \(index)")
+            return
+        }
+        
+        // Update status of previously selected image
         if let current = currentImage, current.status == .editing {
             current.status = .ready
         }
         
         currentIndex = index
         
-        // Neues Bild Status aktualisieren
+        // Update status of newly selected image
         if let current = currentImage, current.status == .pending {
             current.status = .editing
         }
+        
+        print("👉 Selected image \(index + 1)/\(images.count): \(currentImage?.filename ?? "unknown")")
     }
     
-    /// Geht zum nächsten Bild
-    func nextImage() {
-        if currentIndex < images.count - 1 {
-            selectImage(at: currentIndex + 1)
+    /// Navigates to the next image in the batch
+    ///
+    /// - Returns: `true` if navigation was successful, `false` if already at the last image
+    @discardableResult
+    func nextImage() -> Bool {
+        guard currentIndex < images.count - 1 else {
+            print("ℹ️ Already at last image")
+            return false
         }
+        
+        selectImage(at: currentIndex + 1)
+        return true
     }
     
-    /// Geht zum vorherigen Bild
-    func previousImage() {
-        if currentIndex > 0 {
-            selectImage(at: currentIndex - 1)
+    /// Navigates to the previous image in the batch
+    ///
+    /// - Returns: `true` if navigation was successful, `false` if already at the first image
+    @discardableResult
+    func previousImage() -> Bool {
+        guard currentIndex > 0 else {
+            print("ℹ️ Already at first image")
+            return false
         }
+        
+        selectImage(at: currentIndex - 1)
+        return true
     }
     
-    /// Markiert aktuelles Bild als fertig und geht zum nächsten
+    /// Marks the current image as ready and navigates to the next image
+    ///
+    /// This is a convenience method commonly used in the workflow after finishing
+    /// editing an image.
     func markCurrentAsReadyAndNext() {
         if let current = currentImage {
             current.status = .ready
+            print("✅ Marked as ready: \(current.filename)")
         }
         nextImage()
     }
     
-    /// Aktualisiert Crop-Einstellungen für aktuelles Bild
+    // MARK: - Crop Settings Management
+    
+    /// Updates the crop settings for the currently selected image
+    ///
+    /// - Parameter settings: New crop settings to apply
     func updateCurrentCropSettings(_ settings: CropSettings) {
-        currentImage?.cropSettings = settings
-    }
-    
-    /// Entfernt ein Bild aus der Liste
-    func removeImage(at index: Int) {
-        guard index >= 0 && index < images.count else { return }
-        images.remove(at: index)
-        
-        // Index anpassen wenn nötig
-        if currentIndex >= images.count {
-            currentIndex = max(0, images.count - 1)
+        guard let current = currentImage else {
+            print("⚠️ Cannot update crop settings: no image selected")
+            return
         }
+        
+        current.cropSettings = settings
     }
     
-    /// Löscht alle Bilder
-    func clear() {
-        images.removeAll()
-        currentIndex = 0
+    // MARK: - Validation
+    
+    /// Checks if an index is valid for the current images array
+    ///
+    /// - Parameter index: Index to validate
+    /// - Returns: `true` if the index is within bounds
+    private func isValidIndex(_ index: Int) -> Bool {
+        return index >= 0 && index < images.count
     }
 }
-
-// MARK: - NSImage Extension für Thumbnail-Generierung
-extension NSImage {
-    func resized(to targetSize: CGSize) -> NSImage {
-        let sourceSize = self.size
-        let widthRatio = targetSize.width / sourceSize.width
-        let heightRatio = targetSize.height / sourceSize.height
-        let scaleFactor = min(widthRatio, heightRatio)
-        
-        let scaledSize = CGSize(
-            width: sourceSize.width * scaleFactor,
-            height: sourceSize.height * scaleFactor
-        )
-        
-        let image = NSImage(size: scaledSize)
-        image.lockFocus()
-        
-        NSGraphicsContext.current?.imageInterpolation = .high
-        self.draw(
-            in: NSRect(origin: .zero, size: scaledSize),
-            from: NSRect(origin: .zero, size: sourceSize),
-            operation: .copy,
-            fraction: 1.0
-        )
-        
-        image.unlockFocus()
-        return image
-    }
-}
-
