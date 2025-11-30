@@ -51,17 +51,22 @@ PhotoCropper/
 | `AspectRatio` | Aspect ratio calculations and crop sizing | CoreGraphics |
 | `CropSettings` | Container for all crop-related settings | AspectRatio |
 | `ImageData` | Represents loaded image with metadata | ImageIO, MetadataService |
-| `ExifData` | EXIF/XMP metadata structures | None |
-| `BatchImageManager` | Manages multiple images for batch processing | ImageData, CropSettings |
-| `CompositionOverlay` | Composition guide definitions | None |
+| `ExifData` | EXIF/XMP metadata structures and coordinate normalization | None |
+| `BatchImageItem` | Individual batch processing item with status tracking | ImageData, CropSettings |
+| `BatchImageManager` | Manages multiple images for batch processing | BatchImageItem |
+| `CompositionOverlay` | Composition guide definitions with calculation methods | CoreGraphics |
+| `OverlayGuide` | Unified overlay system (MCU + Composition guides) | CompositionOverlay |
 
 ### Services Layer
 
 | Component | Purpose | External Dependencies |
 |-----------|---------|----------------------|
-| `ImageService` | Image loading and format detection | ImageIO |
+| `ImageService` | Image loading, format detection, thumbnail generation | ImageIO |
+| `ImageCropService` | Standard (re-encoding) cropping for all formats | ImageIO |
 | `JPEGService` | JPEG-specific operations, MCU handling | jpegtran (Homebrew) |
-| `MetadataService` | EXIF/XMP read/write operations | exiftool (Homebrew) |
+| `MetadataService` | Facade for metadata operations | MetadataReader, MetadataWriter |
+| `MetadataReader` | Reads EXIF/XMP metadata | exiftool (Homebrew) |
+| `MetadataWriter` | Writes EXIF/XMP metadata (3-pass strategy) | exiftool (Homebrew) |
 | `CropEngine` | Crop calculations and coordinate transformations | None |
 | `ExifDateParser` | EXIF date parsing and filename generation | None |
 
@@ -69,9 +74,11 @@ PhotoCropper/
 
 | Component | Purpose |
 |-----------|---------|
-| `CoordinateMapper` | Coordinate system transformations |
-| `FileManager+Extensions` | File system helpers |
+| `CoordinateMapper` | Coordinate system transformations with validation |
+| `FileManager+Extensions` | File system helpers with conflict resolution |
 | `KeyboardMonitor` | Global keyboard event monitoring |
+| `ProcessExecutor` | Safe execution of external commands via posix_spawn |
+| `NSImage+Extensions` | Image manipulation helpers (resizing) |
 
 ---
 
@@ -266,12 +273,26 @@ Precision: 5 decimal places maximum
 - Added batch processing
 - Introduced composition overlays
 - Enhanced with automatic metadata loading
+- **2025-11-30**: Major refactoring for Clean Code principles
+  - Split `MetadataService` into Reader/Writer/Facade pattern
+  - Created `ProcessExecutor` for safe external command execution
+  - Created `ImageCropService` for standard (re-encoding) cropping
+  - Separated `BatchImageItem` from `BatchImageManager`
+  - Enhanced all services with comprehensive Swift DocC documentation
+  - Translated all comments to English
+  - Improved error handling with Result types
+  - Added extensive utility methods to FileManager extensions
+  - Fixed file conflict handling during export
+  - Unified overlay system (MCU + Composition guides)
 
 ### Current Version
-- Fully functional batch processor
+- Fully functional batch processor with conflict resolution
 - Complete metadata round-trip support
 - MCU-sensitive lossless JPEG cropping
+- Standard re-encoding cropping for all formats (HEIC, PNG, TIFF)
 - Responsive UI for various screen sizes
+- Comprehensive English documentation throughout codebase
+- Clean Code architecture with SRP, DI, and proper error handling
 
 ---
 
@@ -314,9 +335,11 @@ Precision: 5 decimal places maximum
 - Keyboard shortcuts customization
 
 ### Known Limitations
-- MCU size detection is simplified (assumes 8x8)
-- HEIC doesn't support MCU-based lossless cropping
+- MCU size detection is simplified (assumes 8x8 for standard JPEGs)
+- HEIC doesn't support MCU-based lossless cropping (uses re-encoding)
+- PNG/TIFF always use re-encoding (no lossless crop available)
 - No automated tests (manual testing only)
+- External dependencies (jpegtran, exiftool) must be installed separately
 
 ---
 
@@ -335,5 +358,5 @@ This document serves as the central source of truth for the PhotoCropper project
 - External dependencies change
 - Major refactoring is completed
 
-**Last Updated**: 2025-11-30
+**Last Updated**: 2025-11-30 (Post-Refactoring: Steps 1-13 Complete)
 
