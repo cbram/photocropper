@@ -423,10 +423,10 @@ class MetadataService {
         
         // Custom Tags in IPTC-Dictionary für unsere eigene Verwendung
         var iptcDict = metadata[kCGImagePropertyIPTCDictionary as String] as? [String: Any] ?? [:]
-        iptcDict[EXIFTags.cropMode] = mode.rawValue
-        iptcDict[EXIFTags.originalRatio] = originalRatio
-        iptcDict[EXIFTags.targetRatio] = targetRatio.id
-        iptcDict[EXIFTags.cropDateTime] = ISO8601DateFormatter().string(from: Date())
+        iptcDict[EXIFTags.Custom.cropMode] = mode.rawValue
+        iptcDict[EXIFTags.Custom.originalRatio] = originalRatio
+        iptcDict[EXIFTags.Custom.targetRatio] = targetRatio.id
+        iptcDict[EXIFTags.Custom.cropDateTime] = ISO8601DateFormatter().string(from: Date())
         metadata[kCGImagePropertyIPTCDictionary as String] = iptcDict
         
         print("  ✅ IPTC Custom Tags geschrieben")
@@ -607,10 +607,10 @@ class MetadataService {
         
         // Custom Tags aus XMP lesen
         let xmpDict = properties[kCGImagePropertyIPTCDictionary as String] as? [String: Any] ?? [:]
-        let cropModeString = xmpDict[EXIFTags.cropMode] as? String ?? CropMode.standard.rawValue
+        let cropModeString = xmpDict[EXIFTags.Custom.cropMode] as? String ?? CropMode.standard.rawValue
         let mode = CropMode(rawValue: cropModeString) ?? .standard
-        let originalRatio = xmpDict[EXIFTags.originalRatio] as? String ?? "unknown"
-        let targetRatioStr = xmpDict[EXIFTags.targetRatio] as? String ?? "unknown"
+        let originalRatio = xmpDict[EXIFTags.Custom.originalRatio] as? String ?? "unknown"
+        let targetRatioStr = xmpDict[EXIFTags.Custom.targetRatio] as? String ?? "unknown"
         
         print("📖 Standard EXIF Crop-Metadaten gefunden:")
         print("   Origin: (\(origin.x), \(origin.y))")

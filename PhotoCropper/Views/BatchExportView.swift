@@ -433,10 +433,10 @@ struct BatchExportView: View {
                     }
                 }
             } else {
-                // Normal export with cropping
+                // Physical crop mode
                 if cropSettings.mode == .mcuSensitive && item.imageData.format == .jpeg {
-                    print("✂️ MCU-Lossless Cropping...")
-                    // MCU-lossless cropping
+                    print("✂️ MCU mode: Lossless JPEG cropping...")
+                    // MCU-lossless cropping for JPEG
                     let result = JPEGService.cropLossless(
                         imageURL: item.imageData.url,
                         cropRect: cropSettings.cropBox,
@@ -455,22 +455,21 @@ struct BatchExportView: View {
                         return
                     }
                 } else {
-                    print("📋 Standard mode: Copying file...")
-                    // Standard: Copy file
-                    do {
-                        if FileManager.default.fileExists(atPath: outputURL.path) {
-                            print("🗑️ Removing existing file...")
-                            try FileManager.default.removeItem(at: outputURL)
-                        }
-                        try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
-                        print("✅ File copied")
-                    } catch {
-                        print("❌ Copy failed: \(error.localizedDescription)")
+                    print("✂️ Standard mode: Physical cropping (all formats)...")
+                    // Standard cropping for all formats (HEIC, PNG, JPEG, etc.)
+                    let result = ImageCropService.cropStandard(
+                        imageURL: item.imageData.url,
+                        cropRect: cropSettings.cropBox,
+                        outputURL: outputURL
+                    )
+                    
+                    if case .failure(let error) = result {
+                        print("❌ Standard cropping failed: \(error.localizedDescription)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
                                 success: false,
-                                message: "Copy failed: \(error.localizedDescription)"
+                                message: error.localizedDescription
                             ))
                         }
                         return
@@ -478,8 +477,11 @@ struct BatchExportView: View {
                 }
             }
             
-            // Save metadata if requested
-            if self.saveCropMetadata {
+            // Save metadata ONLY if metadata-only mode is active
+            // IMPORTANT: Don't save crop metadata if image was physically cropped
+            // to prevent double-cropping in other applications!
+            if self.saveCropMetadata && self.onlyMetadata {
+                print("💾 Saving crop metadata (metadata-only mode)...")
                 let result = MetadataService.saveCropMetadata(
                     imageURL: outputURL,
                     cropBox: cropSettings.cropBox,
@@ -499,6 +501,8 @@ struct BatchExportView: View {
                     }
                     return
                 }
+            } else if !self.onlyMetadata {
+                print("💾 Skipping crop metadata (image was physically cropped)")
             }
             
             // Success!

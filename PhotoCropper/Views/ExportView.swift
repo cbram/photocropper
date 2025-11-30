@@ -453,24 +453,24 @@ struct ExportView: View {
         print("  Nur Metadaten: \(onlyMetadata)")
         
         if onlyMetadata {
-            // NUR METADATEN: Originalfile wird direkt mit Metadaten beschrieben
-            print("  📋 Nur-Metadaten-Modus: Kein Cropping, Original wird behalten")
-            // Bei "Original überschreiben" wird direkt ins Original geschrieben
-            // Ansonsten erst kopieren, dann Metadaten schreiben
+            // METADATA ONLY: Original file is copied and crop metadata is written
+            print("  📋 Metadata-only mode: No physical cropping, keeping original")
+            // If "overwrite original" is set, write directly to original
+            // Otherwise copy first, then write metadata
             if !overwriteOriginal {
-                print("  📄 Kopiere Original zu Zielort...")
+                print("  📄 Copying original to destination...")
                 copyImage(from: imageData.url, to: outputURL)
             }
         } else {
-            // NORMALER MODUS: Bild wird physisch gecroppt
+            // PHYSICAL CROP MODE: Image is actually cropped
             if cropSettings.mode == .mcuSensitive && imageData.format == .jpeg {
-                print("  🔄 MCU-Modus: Rufe performLosslessCrop auf...")
-                // Bei MCU-Modus: Verlustfreies Cropping durchführen
+                print("  ✂️ MCU mode: Performing lossless JPEG crop...")
+                // MCU mode: Lossless cropping for JPEG
                 performLosslessCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
             } else {
-                print("  📄 Standard-Modus: Kopiere Datei...")
-                // Standard-Cropping: Bild kopieren
-                copyImage(from: imageData.url, to: outputURL)
+                print("  ✂️ Standard mode: Performing standard crop (all formats)...")
+                // Standard mode: Physical cropping for all formats (HEIC, PNG, JPEG, etc.)
+                performStandardCrop(sourceURL: imageData.url, outputURL: outputURL, cropBox: cropSettings.cropBox)
             }
         }
         
@@ -482,14 +482,17 @@ struct ExportView: View {
             return
         }
         
-        // SCHRITT 2: Metadaten speichern (nur wenn Checkbox aktiviert)
-        // Wichtig: Jetzt in die bereits existierende Ziel-Datei schreiben!
+        // STEP 2: Save metadata (ONLY if metadata-only mode is active)
+        // IMPORTANT: Crop metadata should ONLY be saved when the image is NOT physically cropped
+        // to prevent double-cropping in other applications!
         var metadataSaved = false
-        var cropDataString = "Metadaten nicht gespeichert"
+        var cropDataString = "No metadata saved"
         
-        if saveCropMetadata {
+        if saveCropMetadata && onlyMetadata {
+            // Only save crop metadata if we did NOT physically crop the image
+            print("\n📋 STEP 2: Saving crop metadata (metadata-only mode)")
             let result = MetadataService.saveCropMetadata(
-                imageURL: outputURL,  // Immer in die Ziel-Datei schreiben (die jetzt existiert!)
+                imageURL: outputURL,  // Write to target file (which now exists)
                 cropBox: cropSettings.cropBox,
                 imageSize: imageData.pixelSize,
                 targetRatio: cropSettings.targetRatio,
@@ -500,22 +503,24 @@ struct ExportView: View {
             switch result {
             case .success:
                 metadataSaved = true
-                // Erstelle Crop-Data String für Anzeige
+                // Create crop data string for display
                 let normalized = cropSettings.normalizedCoordinates(for: imageData.pixelSize)
-                let modeString = onlyMetadata ? "NUR METADATEN" : cropSettings.mode.rawValue
                 cropDataString = String(format: 
-                    "Origin: (%.3f, %.3f)\nSize: (%.3f, %.3f)\nMode: %@\nRatio: %@",
+                    "Origin: (%.3f, %.3f)\nSize: (%.3f, %.3f)\nMode: METADATA ONLY\nRatio: %@",
                     normalized.origin.x, normalized.origin.y,
                     normalized.size.width, normalized.size.height,
-                    modeString,
                     cropSettings.targetRatio.id
                 )
             case .failure(let error):
-                // Warnung bei Metadaten-Fehler, aber Datei ist bereits gespeichert
-                print("⚠️ Metadaten konnten nicht gespeichert werden: \(error)")
+                // Warning on metadata error, but file is already saved
+                print("⚠️ Could not save metadata: \(error)")
                 metadataSaved = false
-                cropDataString = "Fehler beim Speichern: \(error.localizedDescription)"
+                cropDataString = "Error saving metadata: \(error.localizedDescription)"
             }
+        } else if !onlyMetadata {
+            // Image was physically cropped - no metadata needed
+            print("\n📋 STEP 2: Skipping crop metadata (image was physically cropped)")
+            cropDataString = "Image physically cropped - no crop metadata needed"
         }
         
         exportResult = .success(outputURL, metadataSaved: metadataSaved, cropData: cropDataString)
@@ -530,7 +535,14 @@ struct ExportView: View {
     private func performLosslessCrop(sourceURL: URL, outputURL: URL, cropBox: CGRect) {
         let result = JPEGService.cropLossless(imageURL: sourceURL, cropRect: cropBox, outputURL: outputURL)
         if case .failure(let error) = result {
-            exportResult = .failure("MCU-Cropping fehlgeschlagen: \(error.localizedDescription)")
+            exportResult = .failure("MCU cropping failed: \(error.localizedDescription)")
+        }
+    }
+    
+    private func performStandardCrop(sourceURL: URL, outputURL: URL, cropBox: CGRect) {
+        let result = ImageCropService.cropStandard(imageURL: sourceURL, cropRect: cropBox, outputURL: outputURL)
+        if case .failure(let error) = result {
+            exportResult = .failure("Standard cropping failed: \(error.localizedDescription)")
         }
     }
     
@@ -542,7 +554,7 @@ struct ExportView: View {
             }
             try fileManager.copyItem(at: sourceURL, to: destURL)
         } catch {
-            exportResult = .failure("Kopieren fehlgeschlagen: \(error.localizedDescription)")
+            exportResult = .failure("Copy failed: \(error.localizedDescription)")
         }
     }
     
