@@ -551,9 +551,18 @@ struct ContentView: View {
     private func switchToCustomRatio() {
         // Berechne Custom-Ratio aus aktueller Crop-Box
         let ratio = calculateImageAspectRatio(size: cropBox.size)
+        
+        // Set flag to prevent onChange handlers from triggering during this update
+        isUpdatingFromDrag = true
+        
         customWidth = String(ratio.width)
         customHeight = String(ratio.height)
         targetRatio = .custom(width: ratio.width, height: ratio.height)
+        
+        // Reset flag after a short delay to allow all updates to complete
+        DispatchQueue.main.async {
+            self.isUpdatingFromDrag = false
+        }
     }
     
     private func toggleCompositionOverlay() {
