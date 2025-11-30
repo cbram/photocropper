@@ -18,9 +18,7 @@ struct ContentView: View {
     @State private var cropBox: CGRect = .zero
     @State private var targetRatio: AspectRatio = .ratio16_9
     @State private var cropMode: CropMode = .mcuSensitive
-    @State private var showMCUGrid: Bool = false
-    @State private var compositionOverlay: CompositionOverlay = .none
-    @State private var showCompositionOverlay: Bool = false
+    @State private var activeOverlay: OverlayGuide = .none
     @State private var customWidth: String = "16"
     @State private var customHeight: String = "9"
     @State private var showBatchExport: Bool = false
@@ -49,7 +47,7 @@ struct ContentView: View {
             
             // Canvas-Bereich
             VStack(spacing: 0) {
-                // Top Navigation - Kompakt für kleinere Bildschirme
+                // Top Navigation - Compact for smaller screens
                 HStack(spacing: 12) {
                     Text("PhotoCropper")
                         .font(.title2)
@@ -59,30 +57,30 @@ struct ContentView: View {
                     
                     Spacer(minLength: 8)
                     
-                    // Kompakte Buttons
+                    // Compact Buttons
                     Button(action: {
                         batchManager.markCurrentAsReadyAndNext()
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle")
-                            Text("Fertig")
+                            Text("Done")
                                 .lineLimit(1)
                         }
                     }
                     .disabled(batchManager.currentImage == nil)
-                    .help("Fertig & Weiter (Enter)")
+                    .help("Done & Next (Enter)")
                     
                     Button(action: {
                         showBatchExport = true
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "square.and.arrow.down.on.square")
-                            Text("Speichern")
+                            Text("Save")
                                 .lineLimit(1)
                         }
                     }
                     .disabled(!batchManager.allReady)
-                    .help("Alle speichern")
+                    .help("Save all")
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -97,9 +95,9 @@ struct ContentView: View {
                         ),
                         cropBox: $cropBox,
                         imageSize: displayImageData.pixelSize,
-                        showMCUGrid: showMCUGrid && !showCompositionOverlay,
+                        showMCUGrid: activeOverlay == .mcuGrid,
                         mcuSize: displayImageData.mcuSize ?? CGSize(width: 8, height: 8),
-                        compositionOverlay: showCompositionOverlay ? compositionOverlay : .none,
+                        compositionOverlay: activeOverlay.asCompositionOverlay,
                         targetAspectRatio: {
                             switch targetRatio {
                             case .ratio16_9:
@@ -141,9 +139,9 @@ struct ContentView: View {
                                     Image(systemName: "photo.stack")
                                         .font(.system(size: 48))
                                         .foregroundColor(.secondary)
-                                    Text("Bilder hier ablegen")
+                                    Text("Drop images here")
                                         .foregroundColor(.secondary)
-                                    Text("oder Dateien öffnen")
+                                    Text("or open files")
                                         .foregroundColor(.secondary)
                                         .font(.caption)
                                 }
@@ -161,8 +159,7 @@ struct ContentView: View {
                     ControlsView(
                         targetRatio: $targetRatio,
                         cropMode: $cropMode,
-                        showMCUGrid: $showMCUGrid,
-                        compositionOverlay: $compositionOverlay,
+                        activeOverlay: $activeOverlay,
                         cropBox: $cropBox,
                         customWidth: $customWidth,
                         customHeight: $customHeight,
@@ -241,7 +238,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: openFile) {
-                    Label("Öffnen", systemImage: "folder")
+                    Label("Open", systemImage: "folder")
                 }
             }
         }
@@ -505,16 +502,19 @@ struct ContentView: View {
     }
     
     private func toggleCompositionOverlay() {
-        print("🎯 toggleCompositionOverlay aufgerufen")
-        print("   compositionOverlay: \(compositionOverlay)")
-        print("   showCompositionOverlay VORHER: \(showCompositionOverlay)")
+        print("🎯 toggleOverlay called")
+        print("   activeOverlay BEFORE: \(activeOverlay)")
         
-        if compositionOverlay != .none {
-            showCompositionOverlay.toggle()
-            print("   showCompositionOverlay NACHHER: \(showCompositionOverlay)")
+        // Cycle through overlay options
+        let allCases = OverlayGuide.allCases
+        if let currentIndex = allCases.firstIndex(of: activeOverlay) {
+            let nextIndex = (currentIndex + 1) % allCases.count
+            activeOverlay = allCases[nextIndex]
         } else {
-            print("   ⚠️ compositionOverlay ist .none - Toggle wird ignoriert")
+            activeOverlay = .none
         }
+        
+        print("   activeOverlay AFTER: \(activeOverlay)")
     }
 }
 

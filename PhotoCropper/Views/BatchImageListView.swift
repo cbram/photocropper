@@ -2,7 +2,7 @@
 //  BatchImageListView.swift
 //  PhotoCropper
 //
-//  Zeigt Liste der Bilder mit Thumbnails für Batch-Verarbeitung
+//  Displays list of images with thumbnails for batch processing
 //
 
 import SwiftUI
@@ -14,7 +14,7 @@ struct BatchImageListView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Text("BILDER")
+                Text("IMAGES")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
@@ -40,10 +40,10 @@ struct BatchImageListView: View {
                     Image(systemName: "photo.on.rectangle.angled")
                         .font(.system(size: 48))
                         .foregroundColor(.gray.opacity(0.5))
-                    Text("Keine Bilder geladen")
+                    Text("No images loaded")
                         .foregroundColor(.secondary)
                         .font(.callout)
-                    Text("Ziehen Sie Bilder hier hinein")
+                    Text("Drop images here")
                         .foregroundColor(.secondary)
                         .font(.caption)
                     Spacer()
@@ -79,7 +79,7 @@ struct BatchImageListView: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle")
-                        Text("Alle schließen")
+                        Text("Close All")
                     }
                     .font(.caption)
                 }

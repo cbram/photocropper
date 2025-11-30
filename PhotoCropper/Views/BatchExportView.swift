@@ -2,7 +2,7 @@
 //  BatchExportView.swift
 //  PhotoCropper
 //
-//  Batch-Export-Dialog für mehrere Bilder
+//  Batch export dialog for multiple images
 //
 
 import SwiftUI
@@ -21,7 +21,7 @@ struct BatchExportView: View {
     @State private var currentExportIndex: Int = 0
     @State private var exportResults: [ExportResult] = []
     @State private var showResults: Bool = false
-    @State private var imagesToExport: [BatchImageItem] = []  // Liste wird einmal erstellt!
+    @State private var imagesToExport: [BatchImageItem] = []  // List is created once!
     
     struct ExportResult {
         let filename: String
@@ -31,18 +31,18 @@ struct BatchExportView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("BATCH-EXPORT")
+            Text("BATCH EXPORT")
                 .font(.headline)
                 .foregroundColor(.secondary)
             
             if !showResults {
-                // Konfiguration
+                // Configuration
                 VStack(alignment: .leading, spacing: 16) {
-                    // Anzahl Bilder
+                    // Number of images
                     HStack {
                         Image(systemName: "photo.stack")
                             .foregroundColor(.blue)
-                        Text("\(batchManager.readyCount) Bilder bereit zum Export")
+                        Text("\(batchManager.readyCount) images ready to export")
                             .font(.callout)
                             .fontWeight(.semibold)
                     }
@@ -52,44 +52,44 @@ struct BatchExportView: View {
                     
                     Divider()
                     
-                    // Zielordner
+                    // Output directory
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Zielordner:")
+                        Text("Output Directory:")
                             .font(.callout)
                             .fontWeight(.semibold)
                         HStack {
-                            Text(outputDirectory?.path ?? "Nicht ausgewählt")
+                            Text(outputDirectory?.path ?? "Not selected")
                                 .foregroundColor(.secondary)
                                 .font(.caption)
                             Spacer()
-                            Button("Auswählen...") {
+                            Button("Select...") {
                                 selectOutputDirectory()
                             }
                         }
-                        Text("Standard: Ursprungsordner jedes Bildes")
+                        Text("Default: Original directory of each image")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                     
                     Divider()
                     
-                    // Optionen
+                    // Options
                     VStack(alignment: .leading, spacing: 12) {
-                        Toggle("Original überschreiben", isOn: $overwriteOriginal)
+                        Toggle("Overwrite original", isOn: $overwriteOriginal)
                             .foregroundColor(overwriteOriginal ? .red : .primary)
                         
                         if overwriteOriginal {
-                            Toggle("Backup des Originals erstellen", isOn: $createBackup)
+                            Toggle("Create backup of original", isOn: $createBackup)
                                 .padding(.leading, 20)
                         }
                         
                         Divider()
                         
-                        Toggle("Crop-Daten in EXIF speichern", isOn: $saveCropMetadata)
+                        Toggle("Save crop data in EXIF", isOn: $saveCropMetadata)
                             .fontWeight(saveCropMetadata ? .semibold : .regular)
                         
                         if saveCropMetadata {
-                            Toggle("Nur Metadaten (Bild nicht physisch croppen)", isOn: $onlyMetadata)
+                            Toggle("Metadata only (don't physically crop image)", isOn: $onlyMetadata)
                                 .padding(.leading, 20)
                             
                             if onlyMetadata {
@@ -97,7 +97,7 @@ struct BatchExportView: View {
                                     Image(systemName: "tag.fill")
                                         .foregroundColor(.purple)
                                         .font(.caption)
-                                    Text("Nur EXIF-Tags werden geschrieben")
+                                    Text("Only EXIF tags will be written")
                                         .font(.caption2)
                                         .foregroundColor(.purple)
                                 }
@@ -113,7 +113,7 @@ struct BatchExportView: View {
                 if isExporting {
                     VStack(spacing: 8) {
                         ProgressView(value: Double(currentExportIndex), total: Double(imagesToExport.count))
-                        Text("Exportiere \(currentExportIndex + 1) von \(imagesToExport.count)...")
+                        Text("Exporting \(currentExportIndex + 1) of \(imagesToExport.count)...")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -126,7 +126,7 @@ struct BatchExportView: View {
                     }) {
                         HStack {
                             Image(systemName: "xmark.circle")
-                            Text("Abbrechen")
+                            Text("Cancel")
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -148,7 +148,7 @@ struct BatchExportView: View {
                             } else {
                                 Image(systemName: "square.and.arrow.down.on.square.fill")
                             }
-                            Text(isExporting ? "Exportiere..." : "Alle speichern")
+                            Text(isExporting ? "Exporting..." : "Save All")
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -160,19 +160,19 @@ struct BatchExportView: View {
                     .disabled(isExporting || batchManager.readyCount == 0)
                 }
             } else {
-                // Ergebnisse
+                // Results
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
                             .font(.title2)
-                        Text("Export abgeschlossen")
+                        Text("Export completed")
                             .font(.title3)
                             .fontWeight(.bold)
                     }
                     
                     let successCount = exportResults.filter { $0.success }.count
-                    let skippedCount = exportResults.filter { $0.success && $0.message.contains("Übersprungen") }.count
+                    let skippedCount = exportResults.filter { $0.success && $0.message.contains("Skipped") }.count
                     let writtenCount = successCount - skippedCount
                     let failCount = exportResults.count - successCount
                     
@@ -180,14 +180,14 @@ struct BatchExportView: View {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("\(writtenCount) geschrieben")
+                            Text("\(writtenCount) written")
                         }
                         
                         if skippedCount > 0 {
                             HStack {
                                 Image(systemName: "forward.circle.fill")
                                     .foregroundColor(.blue)
-                                Text("\(skippedCount) übersprungen")
+                                Text("\(skippedCount) skipped")
                             }
                         }
                         
@@ -195,7 +195,7 @@ struct BatchExportView: View {
                             HStack {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.red)
-                                Text("\(failCount) fehlgeschlagen")
+                                Text("\(failCount) failed")
                             }
                         }
                     }
@@ -203,12 +203,12 @@ struct BatchExportView: View {
                     
                     Divider()
                     
-                    // Ergebnis-Liste
+                    // Result list
                     ScrollView {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(Array(exportResults.enumerated()), id: \.offset) { index, result in
                                 HStack(spacing: 8) {
-                                    if result.success && result.message.contains("Übersprungen") {
+                                    if result.success && result.message.contains("Skipped") {
                                         Image(systemName: "forward.circle.fill")
                                             .foregroundColor(.blue)
                                             .font(.caption)
@@ -224,7 +224,7 @@ struct BatchExportView: View {
                                     
                                     Spacer()
                                     
-                                    if result.success && result.message.contains("Übersprungen") {
+                                    if result.success && result.message.contains("Skipped") {
                                         Text(result.message)
                                             .font(.caption2)
                                             .foregroundColor(.blue)
@@ -265,7 +265,7 @@ struct BatchExportView: View {
     }
     
     private func setupDefaultOutputDirectory() {
-        // Standard: Ordner des ersten Bildes
+        // Default: Directory of the first image
         if let firstImage = batchManager.images.first {
             outputDirectory = firstImage.imageData.url.deletingLastPathComponent()
         }
@@ -287,16 +287,16 @@ struct BatchExportView: View {
         exportResults = []
         currentExportIndex = 0
         
-        // WICHTIG: Liste EINMAL am Anfang erstellen, NICHT bei jedem Aufruf!
+        // IMPORTANT: Create list ONCE at the beginning, NOT on each call!
         imagesToExport = batchManager.images.filter { item in
             if case .ready = item.status { return true }
             if case .editing = item.status { return true }
             return false
         }
         
-        print("🚀 Starte Batch-Export mit \(imagesToExport.count) Bildern")
+        print("🚀 Starting batch export with \(imagesToExport.count) images")
         
-        // Exportiere alle Bilder nacheinander
+        // Export all images sequentially
         exportNextImage()
     }
     
@@ -304,27 +304,27 @@ struct BatchExportView: View {
         print("📊 exportNextImage: currentIndex=\(currentExportIndex), totalCount=\(imagesToExport.count)")
         
         guard currentExportIndex < imagesToExport.count else {
-            // Fertig!
-            print("✅ Alle Bilder exportiert!")
+            // Done!
+            print("✅ All images exported!")
             isExporting = false
             showResults = true
             return
         }
         
         let item = imagesToExport[currentExportIndex]
-        print("📤 Exportiere Bild \(currentExportIndex + 1)/\(imagesToExport.count): \(item.imageData.url.lastPathComponent)")
+        print("📤 Exporting image \(currentExportIndex + 1)/\(imagesToExport.count): \(item.imageData.url.lastPathComponent)")
         
-        // Exportiere Bild
+        // Export image
         exportImage(item) { result in
             if result.success {
-                print("📥 Export-Ergebnis für Bild \(self.currentExportIndex + 1): ✅ Erfolg - \(result.filename)")
+                print("📥 Export result for image \(self.currentExportIndex + 1): ✅ Success - \(result.filename)")
             } else {
-                print("📥 Export-Ergebnis für Bild \(self.currentExportIndex + 1): ❌ Fehler - \(result.message)")
+                print("📥 Export result for image \(self.currentExportIndex + 1): ❌ Error - \(result.message)")
             }
             
             self.exportResults.append(result)
             
-            // Markiere als exportiert (muss auf Main-Thread sein!)
+            // Mark as exported (must be on main thread!)
             DispatchQueue.main.async {
                 if result.success {
                     item.status = .exported
@@ -335,35 +335,35 @@ struct BatchExportView: View {
             
             self.currentExportIndex += 1
             
-            // Nächstes Bild (mit kleiner Verzögerung für UI-Update)
+            // Next image (with small delay for UI update)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                print("🔄 Starte nächstes Bild...")
+                print("🔄 Starting next image...")
                 self.exportNextImage()
             }
         }
     }
     
     private func exportImage(_ item: BatchImageItem, completion: @escaping (ExportResult) -> Void) {
-        // Führe Export in Background-Thread aus
+        // Execute export in background thread
         DispatchQueue.global(qos: .userInitiated).async {
             guard let cropSettings = item.cropSettings else {
                 DispatchQueue.main.async {
                     completion(ExportResult(
                         filename: item.imageData.url.lastPathComponent,
                         success: false,
-                        message: "Keine Crop-Einstellungen"
+                        message: "No crop settings"
                     ))
                 }
                 return
             }
             
-            // Prüfe ob Crop-Daten unverändert sind (nur wenn "Nur Metadaten" aktiv)
+            // Check if crop data is unchanged (only when "Metadata only" is active)
             if self.onlyMetadata && self.saveCropMetadata {
                 if let existingMetadata = item.imageData.cropMetadata {
                     let imageSize = item.imageData.pixelSize
                     let normalized = cropSettings.normalizedCoordinates(for: imageSize)
                     
-                    // Vergleiche mit Toleranz wegen Float-Genauigkeit
+                    // Compare with tolerance due to float precision
                     let tolerance = 0.0001
                     let originMatches = abs(normalized.origin.x - existingMetadata.originX) < tolerance &&
                                        abs(normalized.origin.y - existingMetadata.originY) < tolerance
@@ -373,12 +373,12 @@ struct BatchExportView: View {
                     let ratioMatches = cropSettings.targetRatio.id == existingMetadata.targetRatio
                     
                     if originMatches && sizeMatches && modeMatches && ratioMatches {
-                        print("⏭️ Überspringe \(item.imageData.url.lastPathComponent) - Crop-Daten sind bereits identisch")
+                        print("⏭️ Skipping \(item.imageData.url.lastPathComponent) - Crop data is already identical")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: item.imageData.url.lastPathComponent,
                                 success: true,
-                                message: "Übersprungen (keine Änderungen)"
+                                message: "Skipped (no changes)"
                             ))
                         }
                         return
@@ -386,14 +386,14 @@ struct BatchExportView: View {
                 }
             }
             
-            // Dateiname generieren
+            // Generate filename
             let baseFilename = ExifDateParser.generateFilename(from: item.imageData)
             let ratioSuffix = ExifDateParser.suffixForRatio(cropSettings.targetRatio)
             let nameWithoutExtension = (baseFilename as NSString).deletingPathExtension
             let extensionString = item.imageData.url.pathExtension
             let filename = "\(nameWithoutExtension)_\(ratioSuffix).\(extensionString)"
         
-            // Ziel-URL bestimmen
+            // Determine output URL
             let outputURL: URL
             if self.overwriteOriginal {
                 outputURL = item.imageData.url
@@ -402,38 +402,38 @@ struct BatchExportView: View {
                 outputURL = directory.appendingPathComponent(filename)
             }
             
-            print("📂 Ziel: \(outputURL.path)")
-            print("📄 Quelle: \(item.imageData.url.path)")
-            print("⚙️ Mode: \(self.onlyMetadata ? "Nur Metadaten" : "Normal"), Overwrite: \(self.overwriteOriginal)")
-            print("💾 Backup: \(self.createBackup ? "Ja" : "Nein")")
+            print("📂 Target: \(outputURL.path)")
+            print("📄 Source: \(item.imageData.url.path)")
+            print("⚙️ Mode: \(self.onlyMetadata ? "Metadata only" : "Normal"), Overwrite: \(self.overwriteOriginal)")
+            print("💾 Backup: \(self.createBackup ? "Yes" : "No")")
             
-            // Backup falls gewünscht
+            // Create backup if requested
             if self.createBackup && self.overwriteOriginal {
-                print("💾 Erstelle Backup...")
+                print("💾 Creating backup...")
                 self.createBackupFile(for: item.imageData.url)
             }
             
-            // Export durchführen
+            // Perform export
             if self.onlyMetadata {
-                // Nur Metadaten: Datei kopieren falls nötig
+                // Metadata only: Copy file if necessary
                 if !self.overwriteOriginal {
                     do {
-                        print("📋 Kopiere für Metadaten-Modus...")
+                        print("📋 Copying for metadata mode...")
                         try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
                     } catch {
-                        print("❌ Kopieren fehlgeschlagen: \(error.localizedDescription)")
+                        print("❌ Copy failed: \(error.localizedDescription)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
                                 success: false,
-                                message: "Kopieren fehlgeschlagen: \(error.localizedDescription)"
+                                message: "Copy failed: \(error.localizedDescription)"
                             ))
                         }
                         return
                     }
                 }
             } else {
-                // Normaler Export mit Cropping
+                // Normal export with cropping
                 if cropSettings.mode == .mcuSensitive && item.imageData.format == .jpeg {
                     print("✂️ MCU-Lossless Cropping...")
                     // MCU-lossless cropping
@@ -444,7 +444,7 @@ struct BatchExportView: View {
                     )
                     
                     if case .failure(let error) = result {
-                        print("❌ MCU-Cropping fehlgeschlagen: \(error.localizedDescription)")
+                        print("❌ MCU cropping failed: \(error.localizedDescription)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
@@ -455,22 +455,22 @@ struct BatchExportView: View {
                         return
                     }
                 } else {
-                    print("📋 Standard-Modus: Kopiere Datei...")
-                    // Standard: Datei kopieren
+                    print("📋 Standard mode: Copying file...")
+                    // Standard: Copy file
                     do {
                         if FileManager.default.fileExists(atPath: outputURL.path) {
-                            print("🗑️ Entferne existierende Datei...")
+                            print("🗑️ Removing existing file...")
                             try FileManager.default.removeItem(at: outputURL)
                         }
                         try FileManager.default.copyItem(at: item.imageData.url, to: outputURL)
-                        print("✅ Datei kopiert")
+                        print("✅ File copied")
                     } catch {
-                        print("❌ Kopieren fehlgeschlagen: \(error.localizedDescription)")
+                        print("❌ Copy failed: \(error.localizedDescription)")
                         DispatchQueue.main.async {
                             completion(ExportResult(
                                 filename: filename,
                                 success: false,
-                                message: "Kopieren fehlgeschlagen: \(error.localizedDescription)"
+                                message: "Copy failed: \(error.localizedDescription)"
                             ))
                         }
                         return
@@ -478,7 +478,7 @@ struct BatchExportView: View {
                 }
             }
             
-            // Metadaten speichern falls gewünscht
+            // Save metadata if requested
             if self.saveCropMetadata {
                 let result = MetadataService.saveCropMetadata(
                     imageURL: outputURL,
@@ -494,14 +494,14 @@ struct BatchExportView: View {
                         completion(ExportResult(
                             filename: filename,
                             success: false,
-                            message: "Metadaten-Fehler: \(error.localizedDescription)"
+                            message: "Metadata error: \(error.localizedDescription)"
                         ))
                     }
                     return
                 }
             }
             
-            // Erfolg!
+            // Success!
             DispatchQueue.main.async {
                 completion(ExportResult(
                     filename: filename,
@@ -517,13 +517,13 @@ struct BatchExportView: View {
         do {
             let fileManager = FileManager.default
             if fileManager.fileExists(atPath: backupURL.path) {
-                print("   ⚠️ Entferne altes Backup: \(backupURL.lastPathComponent)")
+                print("   ⚠️ Removing old backup: \(backupURL.lastPathComponent)")
                 try fileManager.removeItem(at: backupURL)
             }
             try fileManager.copyItem(at: url, to: backupURL)
-            print("   ✅ Backup erstellt: \(backupURL.lastPathComponent)")
+            print("   ✅ Backup created: \(backupURL.lastPathComponent)")
         } catch {
-            print("   ❌ Backup-Erstellung fehlgeschlagen: \(error.localizedDescription)")
+            print("   ❌ Backup creation failed: \(error.localizedDescription)")
         }
     }
 }

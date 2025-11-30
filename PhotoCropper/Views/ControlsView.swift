@@ -2,7 +2,7 @@
 //  ControlsView.swift
 //  PhotoCropper
 //
-//  Control-Panel mit Format-Auswahl, Modus-Toggle, Slider, Buttons
+//  Control panel with format selection, mode toggle, sliders, and buttons
 //
 
 import SwiftUI
@@ -10,8 +10,7 @@ import SwiftUI
 struct ControlsView: View {
     @Binding var targetRatio: AspectRatio
     @Binding var cropMode: CropMode
-    @Binding var showMCUGrid: Bool
-    @Binding var compositionOverlay: CompositionOverlay
+    @Binding var activeOverlay: OverlayGuide
     @Binding var cropBox: CGRect
     @Binding var customWidth: String
     @Binding var customHeight: String
@@ -22,7 +21,7 @@ struct ControlsView: View {
     var onMaximize: () -> Void
     var onCropBoxChanged: (CGRect) -> Void
     
-    // Helper für Picker: Vereinfachtes Enum ohne associated values
+    // Helper for Picker: Simplified enum without associated values
     private enum RatioSelection: String, CaseIterable, Identifiable {
         case ratio16_9 = "16:9"
         case ratio1_1 = "1:1"
@@ -31,7 +30,7 @@ struct ControlsView: View {
         var id: String { rawValue }
     }
     
-    // Computed property für Picker-Selection
+    // Computed property for Picker selection
     private var ratioSelection: RatioSelection {
         let selection: RatioSelection
         switch targetRatio {
@@ -48,9 +47,9 @@ struct ControlsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Zielformat-Auswahl
+            // Target Format Selection
             VStack(alignment: .leading, spacing: 8) {
-                Text("ZIELFORMAT WÄHLEN")
+                Text("TARGET FORMAT")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
@@ -73,17 +72,17 @@ struct ControlsView: View {
                     }
                 )) {
                     Text("16:9 (Landscape)").tag(RatioSelection.ratio16_9)
-                    Text("1:1 (Quadrat)").tag(RatioSelection.ratio1_1)
-                    Text("Benutzerdefiniert").tag(RatioSelection.custom)
+                    Text("1:1 (Square)").tag(RatioSelection.ratio1_1)
+                    Text("Custom").tag(RatioSelection.custom)
                 }
                 .pickerStyle(.radioGroup)
                 
                 if case .custom = targetRatio {
                     HStack {
-                        Text("Breite:")
+                        Text("Width:")
                         TextField("16", text: $customWidth)
                             .frame(width: 60)
-                        Text("Höhe:")
+                        Text("Height:")
                         TextField("9", text: $customHeight)
                             .frame(width: 60)
                     }
@@ -93,14 +92,14 @@ struct ControlsView: View {
             
             Divider()
             
-            // Cropping-Modus
+            // Cropping Mode
             VStack(alignment: .leading, spacing: 8) {
-                Text("CROPPING-MODUS")
+                Text("CROPPING MODE")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
-                Picker("Modus", selection: $cropMode) {
-                    Text("MCU-sensitiv (Lossless)").tag(CropMode.mcuSensitive)
+                Picker("Mode", selection: $cropMode) {
+                    Text("MCU-Sensitive (Lossless)").tag(CropMode.mcuSensitive)
                     Text("Standard (Fallback)").tag(CropMode.standard)
                 }
                 .pickerStyle(.radioGroup)
@@ -108,35 +107,52 @@ struct ControlsView: View {
             
             Divider()
             
-            // Kompositions-Overlay
+            // Overlay Guides
             VStack(alignment: .leading, spacing: 8) {
-                Text("KOMPOSITIONS-OVERLAY")
+                Text("OVERLAY GUIDES")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
-                Picker("Overlay", selection: $compositionOverlay) {
-                    ForEach(CompositionOverlay.allCases, id: \.self) { overlay in
-                        Text(overlay.displayName).tag(overlay)
-                    }
+                Picker("Guide", selection: $activeOverlay) {
+                    // None option
+                    Text(OverlayGuide.none.displayName)
+                        .tag(OverlayGuide.none)
+                    
+                    // Composition overlays (artistic guides)
+                    Text(OverlayGuide.ruleOfThirds.displayName)
+                        .tag(OverlayGuide.ruleOfThirds)
+                    Text(OverlayGuide.goldenRatio.displayName)
+                        .tag(OverlayGuide.goldenRatio)
+                    Text(OverlayGuide.fibonacciTopLeft.displayName)
+                        .tag(OverlayGuide.fibonacciTopLeft)
+                    Text(OverlayGuide.fibonacciTopRight.displayName)
+                        .tag(OverlayGuide.fibonacciTopRight)
+                    Text(OverlayGuide.fibonacciBottomLeft.displayName)
+                        .tag(OverlayGuide.fibonacciBottomLeft)
+                    Text(OverlayGuide.fibonacciBottomRight.displayName)
+                        .tag(OverlayGuide.fibonacciBottomRight)
+                    
+                    // MCU Grid (technical overlay) - at the bottom
+                    Text(OverlayGuide.mcuGrid.displayName)
+                        .tag(OverlayGuide.mcuGrid)
                 }
                 .pickerStyle(.radioGroup)
                 
-                HStack(spacing: 4) {
-                    Image(systemName: "keyboard")
+                // Info text
+                if activeOverlay != .none {
+                    Text(activeOverlay.description)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    Text("Leertaste: Overlay ein/ausblenden")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .padding(.leading, 20)
+                        .padding(.top, 4)
                 }
-                .padding(.leading, 20)
             }
             
             Divider()
             
-            // Position & Feintuning
+            // Position & Fine-Tuning
             VStack(alignment: .leading, spacing: 8) {
-                Text("POSITION & FEINTUNING")
+                Text("POSITION & FINE-TUNING")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
@@ -172,21 +188,21 @@ struct ControlsView: View {
                     .disabled(imageSize.height <= cropBox.height)
                     
                     HStack {
-                        Text("Breite:")
+                        Text("Width:")
                         Slider(value: Binding(
                             get: { cropBox.width },
                             set: { newValue in
                                 var newBox = cropBox
-                                // WICHTIG: Max. Breite basierend auf aktueller X-Position!
+                                // IMPORTANT: Max width based on current X position
                                 let maxWidth = imageSize.width - newBox.origin.x
                                 newBox.size.width = max(1, min(newValue, maxWidth))
-                                // Wenn Aspect Ratio gesperrt, Höhe anpassen
+                                // If aspect ratio is locked, adjust height
                                 if case .custom = targetRatio {
-                                    // Bei custom: Nichts tun
+                                    // Custom: Do nothing
                                 } else {
                                     let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
                                     newBox.size.height = newBox.size.width / ratio
-                                    // Sicherstellen dass Höhe nicht über Bildrand hinausgeht
+                                    // Ensure height doesn't exceed image bounds
                                     let maxHeight = imageSize.height - newBox.origin.y
                                     if newBox.size.height > maxHeight {
                                         newBox.size.height = maxHeight
@@ -196,7 +212,7 @@ struct ControlsView: View {
                                 onCropBoxChanged(newBox)
                             }
                         ), in: {
-                            // Bei Aspect Ratio Lock: Max. Breite begrenzen durch max. Höhe UND Position
+                            // With aspect ratio lock: Limit max width by max height AND position
                             let maxWidthForPosition = imageSize.width - cropBox.origin.x
                             if case .custom = targetRatio {
                                 return 1...max(1, maxWidthForPosition)
@@ -214,21 +230,21 @@ struct ControlsView: View {
                     .disabled(imageSize.width <= 0)
                     
                     HStack {
-                        Text("Höhe:")
+                        Text("Height:")
                         Slider(value: Binding(
                             get: { cropBox.height },
                             set: { newValue in
                                 var newBox = cropBox
-                                // WICHTIG: Max. Höhe basierend auf aktueller Y-Position!
+                                // IMPORTANT: Max height based on current Y position
                                 let maxHeight = imageSize.height - newBox.origin.y
                                 newBox.size.height = max(1, min(newValue, maxHeight))
-                                // Wenn Aspect Ratio gesperrt, Breite anpassen
+                                // If aspect ratio is locked, adjust width
                                 if case .custom = targetRatio {
-                                    // Bei custom: Nichts tun
+                                    // Custom: Do nothing
                                 } else {
                                     let ratio = targetRatio == .ratio16_9 ? 16.0/9.0 : 1.0
                                     newBox.size.width = newBox.size.height * ratio
-                                    // Sicherstellen dass Breite nicht über Bildrand hinausgeht
+                                    // Ensure width doesn't exceed image bounds
                                     let maxWidth = imageSize.width - newBox.origin.x
                                     if newBox.size.width > maxWidth {
                                         newBox.size.width = maxWidth
@@ -238,7 +254,7 @@ struct ControlsView: View {
                                 onCropBoxChanged(newBox)
                             }
                         ), in: {
-                            // Bei Aspect Ratio Lock: Max. Höhe begrenzen durch max. Breite UND Position
+                            // With aspect ratio lock: Limit max height by max width AND position
                             let maxHeightForPosition = imageSize.height - cropBox.origin.y
                             if case .custom = targetRatio {
                                 return 1...max(1, maxHeightForPosition)
@@ -255,20 +271,18 @@ struct ControlsView: View {
                     }
                     .disabled(imageSize.height <= 0)
                 }
-                
-                Toggle("MCU-Grid anzeigen", isOn: $showMCUGrid)
             }
             
             Divider()
             
-            // Schnellzugriffe
+            // Quick Actions
             VStack(alignment: .leading, spacing: 8) {
-                Text("SCHNELLZUGRIFFE")
+                Text("QUICK ACTIONS")
                     .font(.headline)
                     .foregroundColor(.secondary)
                 
                 HStack(spacing: 8) {
-                    Button("Zentriert", action: onCenter)
+                    Button("Center", action: onCenter)
                         .buttonStyle(.bordered)
                     Button("Reset", action: onReset)
                         .buttonStyle(.bordered)
@@ -276,11 +290,11 @@ struct ControlsView: View {
                         .buttonStyle(.bordered)
                 }
                 
-                // Eckpunkt-Koordinaten
+                // Corner Coordinates
                 Divider()
                     .padding(.vertical, 8)
                 
-                Text("ECKPUNKT-KOORDINATEN")
+                Text("CORNER COORDINATES")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
@@ -290,13 +304,13 @@ struct ControlsView: View {
                 let y2 = Int(cropBox.origin.y + cropBox.height)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Oben Links:     (\(x1), \(y2))")
+                    Text("Top Left:       (\(x1), \(y2))")
                         .font(.system(.caption, design: .monospaced))
-                    Text("Oben Rechts:    (\(x2), \(y2))")
+                    Text("Top Right:      (\(x2), \(y2))")
                         .font(.system(.caption, design: .monospaced))
-                    Text("Unten Links:    (\(x1), \(y1))")
+                    Text("Bottom Left:    (\(x1), \(y1))")
                         .font(.system(.caption, design: .monospaced))
-                    Text("Unten Rechts:   (\(x2), \(y1))")
+                    Text("Bottom Right:   (\(x2), \(y1))")
                         .font(.system(.caption, design: .monospaced))
                 }
                 .foregroundColor(.secondary)

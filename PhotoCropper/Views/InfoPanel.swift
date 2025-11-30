@@ -2,7 +2,7 @@
 //  InfoPanel.swift
 //  PhotoCropper
 //
-//  Zeigt Metadaten-Informationen an
+//  Displays metadata information
 //
 
 import SwiftUI
@@ -12,25 +12,25 @@ struct InfoPanel: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("BILD-INFORMATIONEN")
+            Text("IMAGE INFORMATION")
                 .font(.headline)
                 .foregroundColor(.secondary)
             
             if let imageData = imageData {
                 VStack(alignment: .leading, spacing: 6) {
-                    InfoRow(label: "Dimensionen:", value: "\(Int(imageData.pixelSize.width))x\(Int(imageData.pixelSize.height))")
+                    InfoRow(label: "Dimensions:", value: "\(Int(imageData.pixelSize.width))×\(Int(imageData.pixelSize.height))")
                     InfoRow(label: "Ratio:", value: imageData.aspectRatioString)
                     InfoRow(label: "Format:", value: formatString(imageData.format))
                     
                     if let creationDate = imageData.creationDate {
-                        InfoRow(label: "Erstellt:", value: formatDate(creationDate))
+                        InfoRow(label: "Created:", value: formatDate(creationDate))
                     }
                     
                     if let mcuSize = imageData.mcuSize {
-                        InfoRow(label: "MCU-Größe:", value: "\(Int(mcuSize.width))x\(Int(mcuSize.height))")
+                        InfoRow(label: "MCU Size:", value: "\(Int(mcuSize.width))×\(Int(mcuSize.height))")
                     }
                     
-                    // Crop-Metadaten Anzeige
+                    // Crop Metadata Display
                     if imageData.hasCropMetadata {
                         Divider()
                             .padding(.vertical, 4)
@@ -39,7 +39,7 @@ struct InfoPanel: View {
                             Image(systemName: "crop")
                                 .foregroundColor(.blue)
                                 .font(.caption)
-                            Text("Crop-Daten vorhanden")
+                            Text("Has Crop Data")
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.blue)
@@ -59,7 +59,7 @@ struct InfoPanel: View {
                     }
                 }
             } else {
-                Text("Kein Bild geladen")
+                Text("No image loaded")
                     .foregroundColor(.secondary)
             }
         }
@@ -77,7 +77,7 @@ struct InfoPanel: View {
         case .tiff:
             return "TIFF"
         case .unknown:
-            return "Unbekannt"
+            return "Unknown"
         }
     }
     

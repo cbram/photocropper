@@ -15,7 +15,7 @@ class CropCanvasView: NSView {
     var imageSize: CGSize = .zero
     var showMCUGrid: Bool = false
     var mcuSize: CGSize = CGSize(width: 8, height: 8)
-    var compositionOverlay: CompositionOverlay = .none
+    var compositionOverlay: CompositionOverlay? = nil
     
     var onCropBoxChanged: ((CGRect) -> Void)?
     var onRatioChanged: (() -> Void)?  // Callback wenn Ratio manuell geändert wird
@@ -68,8 +68,8 @@ class CropCanvasView: NSView {
         drawCropBox(in: imageRect, context: context!)
         
         // Kompositions-Overlay zeichnen (optional) - INNERHALB der Crop-Box
-        if compositionOverlay != .none {
-            drawCompositionOverlay(in: cropRect, context: context!)
+        if let overlay = compositionOverlay {
+            drawCompositionOverlay(overlay, in: cropRect, context: context!)
         }
         
         // Handles NACH allem anderen zeichnen (damit sie immer sichtbar sind)
@@ -166,15 +166,12 @@ class CropCanvasView: NSView {
         }
     }
     
-    private func drawCompositionOverlay(in imageRect: CGRect, context: CGContext) {
+    private func drawCompositionOverlay(_ overlay: CompositionOverlay, in imageRect: CGRect, context: CGContext) {
         // Helles Grau für bessere Sichtbarkeit
         context.setStrokeColor(NSColor.lightGray.withAlphaComponent(0.7).cgColor)
         context.setLineWidth(1.5)
         
-        switch compositionOverlay {
-        case .none:
-            break
-            
+        switch overlay {
         case .ruleOfThirds:
             drawRuleOfThirds(in: imageRect, context: context)
             
@@ -795,7 +792,7 @@ struct CanvasView: NSViewRepresentable {
     var imageSize: CGSize
     var showMCUGrid: Bool
     var mcuSize: CGSize
-    var compositionOverlay: CompositionOverlay
+    var compositionOverlay: CompositionOverlay?
     var targetAspectRatio: CGFloat?  // Für Aspect-Ratio-Lock beim Dragging
     var onCropBoxChanged: ((CGRect) -> Void)?
     var onRatioChanged: (() -> Void)?

@@ -2,7 +2,7 @@
 //  ImageData.swift
 //  PhotoCropper
 //
-//  Repräsentiert ein geladenes Bild mit allen Metadaten
+//  Represents a loaded image with all its metadata
 //
 
 import Foundation
@@ -11,113 +11,221 @@ import CoreGraphics
 import ImageIO
 import Combine
 
-/// Bildformat-Typen
+// MARK: - Image Format
+
+/// Supported image format types
+///
+/// Represents the various image formats that can be loaded and processed
+/// by the application.
 enum ImageFormat {
     case jpeg
     case heic
     case png
     case tiff
     case unknown
+    
+    /// Human-readable name for the format
+    var displayName: String {
+        switch self {
+        case .jpeg: return "JPEG"
+        case .heic: return "HEIC"
+        case .png: return "PNG"
+        case .tiff: return "TIFF"
+        case .unknown: return "Unknown"
+        }
+    }
+    
+    /// Indicates whether this format supports lossless MCU-based cropping
+    var supportsMCUCropping: Bool {
+        return self == .jpeg
+    }
 }
 
-/// Repräsentiert ein geladenes Bild mit Metadaten
+// MARK: - Image Data
+
+/// Represents a loaded image with comprehensive metadata
+///
+/// This class encapsulates all information about a loaded image, including:
+/// - The image itself and its dimensions
+/// - EXIF metadata (orientation, creation date)
+/// - Format information
+/// - Crop metadata (if previously saved)
+/// - MCU information for JPEG images
+///
+/// The class is an `ObservableObject` to support SwiftUI reactive updates.
+///
+/// Example:
+/// ```swift
+/// let imageData = ImageData(url: imageURL)
+/// print("Format: \(imageData.format.displayName)")
+/// print("Size: \(imageData.pixelSize)")
+/// ```
 class ImageData: ObservableObject {
-    /// Bild-URL
+    
+    // MARK: - Properties
+    
+    /// The URL of the image file
     let url: URL
     
-    /// NSImage für Display
+    /// The loaded NSImage for display purposes
     @Published var image: NSImage?
     
-    /// Original-Dimensionen in Pixeln
+    /// Original pixel dimensions (before orientation correction)
     @Published var pixelSize: CGSize = .zero
     
-    /// EXIF-Orientierung (1-8)
+    /// EXIF orientation value (1-8)
+    ///
+    /// - Note: 1 = Normal, 3 = 180° rotated, 6 = 90° CW, 8 = 90° CCW, etc.
     @Published var exifOrientation: Int = 1
     
-    /// Tatsächliche Display-Orientierung (nach EXIF korrigiert)
+    /// Display size after applying EXIF orientation correction
     @Published var displaySize: CGSize = .zero
     
-    /// Bildformat
+    /// Detected image format
     @Published var format: ImageFormat = .unknown
     
-    /// Seitenverhältnis als String (z.B. "3:2", "16:9")
+    /// Simplified aspect ratio as a string (e.g., "3:2", "16:9")
     @Published var aspectRatioString: String = ""
     
-    /// Erstellungsdatum aus EXIF
+    /// Image creation date extracted from EXIF metadata
     @Published var creationDate: Date?
     
-    /// MCU-Größe (falls JPEG)
+    /// MCU (Minimum Coded Unit) size for JPEG images
+    ///
+    /// Only applicable for JPEG format. Typically 8×8 or 16×16 pixels.
     @Published var mcuSize: CGSize?
     
-    /// Gespeicherte Crop-Metadaten (falls vorhanden)
+    /// Previously saved crop metadata, if any
     @Published var cropMetadata: CropMetadata?
     
-    /// Flag ob Bild bereits Crop-Metadaten hat
+    /// Flag indicating whether the image has saved crop metadata
     @Published var hasCropMetadata: Bool = false
     
-    /// Metadaten-Dictionary
+    /// Raw metadata dictionary from ImageIO
+    ///
+    /// Contains all EXIF, TIFF, and other metadata extracted from the image file.
     var metadata: [String: Any] = [:]
     
+    // MARK: - Initialization
+    
+    /// Initializes image data from a file URL
+    ///
+    /// - Parameter url: The URL of the image file to load
+    ///
+    /// - Note: Image loading happens synchronously in the initializer.
+    ///         Consider using async loading for better performance with large images.
     init(url: URL) {
         self.url = url
         loadImage()
     }
     
-    /// Lädt das Bild und extrahiert Metadaten
+    // MARK: - Image Loading
+    
+    /// Loads the image and extracts all metadata
+    ///
+    /// This method performs the following operations:
+    /// 1. Loads the image using ImageIO
+    /// 2. Determines the image format
+    /// 3. Extracts pixel dimensions
+    /// 4. Reads EXIF orientation
+    /// 5. Calculates display size
+    /// 6. Parses creation date
+    /// 7. Reads existing crop metadata if present
+    ///
+    /// - Note: Failed operations are handled gracefully with default values
     private func loadImage() {
         guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
               let imageRef = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            print("⚠️ Failed to load image: \(url.lastPathComponent)")
             return
         }
         
-        // Bildformat bestimmen
+        // Determine image format from UTI
         if let uti = CGImageSourceGetType(imageSource) {
-            format = determineFormat(from: uti as String)
+            format = ImageFormat.from(uti: uti as String)
         }
         
-        // Pixel-Dimensionen
+        // Extract pixel dimensions
         pixelSize = CGSize(width: imageRef.width, height: imageRef.height)
         
-        // EXIF-Orientierung auslesen
-        if let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
-           let orientation = properties[kCGImagePropertyOrientation as String] as? Int {
+        // Load properties once and reuse
+        let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any]
+        
+        // Extract EXIF orientation
+        if let orientation = properties?[kCGImagePropertyOrientation as String] as? Int {
             exifOrientation = orientation
         }
         
-        // Display-Größe berechnen (nach Orientierung korrigiert)
-        displaySize = calculateDisplaySize(from: pixelSize, orientation: exifOrientation)
+        // Calculate display size (corrected for orientation)
+        displaySize = Self.calculateDisplaySize(from: pixelSize, orientation: exifOrientation)
         
-        // Seitenverhältnis berechnen
-        let ratio = calculateImageAspectRatio(size: displaySize)
+        // Calculate simplified aspect ratio
+        let ratio = AspectRatio.calculateSimplified(from: displaySize)
         aspectRatioString = "\(ratio.width):\(ratio.height)"
         
-        // Erstellungsdatum auslesen
-        if let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
-           let exifDict = properties[kCGImagePropertyExifDictionary as String] as? [String: Any],
+        // Extract creation date from EXIF
+        if let exifDict = properties?[kCGImagePropertyExifDictionary as String] as? [String: Any],
            let dateTimeOriginal = exifDict[kCGImagePropertyExifDateTimeOriginal as String] as? String {
-            creationDate = parseEXIFDate(dateTimeOriginal)
+            creationDate = ExifDateParser.parseDate(from: dateTimeOriginal)
         }
         
-        // Metadaten speichern
-        if let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any] {
+        // Store raw metadata
+        if let properties = properties {
             metadata = properties
         }
         
-        // NSImage für Display erstellen
+        // Create NSImage for display
         image = NSImage(cgImage: imageRef, size: displaySize)
         
-        // MCU-Größe für JPEG bestimmen (wird später von JPEGService geladen)
-        
-        // Crop-Metadaten auslesen (falls vorhanden)
+        // Read existing crop metadata if present
         if let cropMeta = MetadataService.readCropMetadata(imageURL: url) {
             cropMetadata = cropMeta
             hasCropMetadata = true
-            print("✅ Bild hat bereits Crop-Metadaten: \(url.lastPathComponent)")
+            print("✅ Image has saved crop metadata: \(url.lastPathComponent)")
         }
     }
     
-    /// Bestimmt das Bildformat aus UTI
-    private func determineFormat(from uti: String) -> ImageFormat {
+    // MARK: - Helper Methods
+    
+    /// Calculates display size based on EXIF orientation
+    ///
+    /// For orientations 5-8 (90° or 270° rotation), width and height are swapped.
+    ///
+    /// - Parameters:
+    ///   - size: The original pixel size
+    ///   - orientation: EXIF orientation value (1-8)
+    /// - Returns: The corrected display size
+    ///
+    /// - Note: Orientation values:
+    ///   - 1, 2: Normal or horizontal flip
+    ///   - 3, 4: 180° rotation or vertical flip
+    ///   - 5, 6, 7, 8: 90° or 270° rotation → swap dimensions
+    private static func calculateDisplaySize(from size: CGSize, orientation: Int) -> CGSize {
+        switch orientation {
+        case 5, 6, 7, 8:
+            // 90° or 270° rotation: swap width and height
+            return CGSize(width: size.height, height: size.width)
+        default:
+            // No dimension change needed
+            return size
+        }
+    }
+}
+
+// MARK: - Image Format Extension
+
+extension ImageFormat {
+    /// Creates an ImageFormat from a UTI (Uniform Type Identifier) string
+    ///
+    /// - Parameter uti: The UTI string (e.g., "public.jpeg")
+    /// - Returns: The corresponding ImageFormat case
+    ///
+    /// Example:
+    /// ```swift
+    /// let format = ImageFormat.from(uti: "public.jpeg")
+    /// // format == .jpeg
+    /// ```
+    static func from(uti: String) -> ImageFormat {
         switch uti {
         case "public.jpeg":
             return .jpeg
@@ -131,29 +239,21 @@ class ImageData: ObservableObject {
             return .unknown
         }
     }
-    
-    /// Berechnet die Display-Größe basierend auf EXIF-Orientierung
-    private func calculateDisplaySize(from size: CGSize, orientation: Int) -> CGSize {
-        // Orientierung 1, 2: Normal oder gespiegelt horizontal
-        // Orientierung 3, 4: 180° gedreht oder gespiegelt vertikal
-        // Orientierung 5-8: 90° oder 270° gedreht → Breite/Höhe tauschen
-        switch orientation {
-        case 1, 2:
-            return size
-        case 3, 4:
-            return size
-        case 5, 6, 7, 8:
-            return CGSize(width: size.height, height: size.width)
-        default:
-            return size
-        }
-    }
-    
-    /// Parst EXIF-Datum-String
-    private func parseEXIFDate(_ dateString: String) -> Date? {
+}
+
+// MARK: - EXIF Date Parser Extension
+
+extension ExifDateParser {
+    /// Parses an EXIF date string into a Date object
+    ///
+    /// This is a convenience wrapper around the ExifDateParser service
+    /// for backwards compatibility with ImageData.
+    ///
+    /// - Parameter dateString: EXIF date string in format "yyyy:MM:dd HH:mm:ss"
+    /// - Returns: Parsed Date object, or nil if parsing fails
+    static func parseDate(from dateString: String) -> Date? {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
         return formatter.date(from: dateString)
     }
 }
-
