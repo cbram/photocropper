@@ -98,10 +98,16 @@ class ProcessExecutor {
         
         // Wait for process to complete
         var exitStatus: Int32 = 0
-        let waitResult = waitpid(pid, &exitStatus, 0)
-        
+        var waitResult: pid_t
+        var waitErrno: Int32 = 0
+        // Retry if a caught signal interrupts the wait (EINTR); the child keeps running
+        repeat {
+            waitResult = waitpid(pid, &exitStatus, 0)
+            waitErrno = errno  // capture before any other call can overwrite it
+        } while waitResult == -1 && waitErrno == EINTR
+
         guard waitResult > 0 else {
-            return .failure(.waitFailed(pid: pid))
+            return .failure(.waitFailed(pid: pid, errorCode: waitErrno))
         }
         
         // Extract actual exit code
@@ -189,8 +195,8 @@ enum ProcessExecutorError: LocalizedError {
     /// posix_spawn failed to start the process
     case spawnFailed(status: Int32, message: String)
     
-    /// waitpid failed to wait for process completion
-    case waitFailed(pid: pid_t)
+    /// waitpid failed to wait for process completion (`errorCode` is the errno value)
+    case waitFailed(pid: pid_t, errorCode: Int32)
     
     /// Command exited with non-zero exit code
     case nonZeroExit(command: String, exitCode: Int32)
@@ -202,8 +208,8 @@ enum ProcessExecutorError: LocalizedError {
         switch self {
         case .spawnFailed(let status, let message):
             return "Failed to spawn process (status \(status)): \(message)"
-        case .waitFailed(let pid):
-            return "Failed to wait for process completion (pid: \(pid))"
+        case .waitFailed(let pid, let errorCode):
+            return "Failed to wait for process completion (pid: \(pid)): \(String(cString: strerror(errorCode))) (errno \(errorCode))"
         case .nonZeroExit(let command, let exitCode):
             let commandName = (command as NSString).lastPathComponent
             return "\(commandName) exited with code \(exitCode)"
