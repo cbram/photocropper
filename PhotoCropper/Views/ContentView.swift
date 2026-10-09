@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @ObservedObject var batchManager: BatchImageManager
     @StateObject private var keyboardMonitor = KeyboardMonitor()
+    @StateObject private var metadataEditor = MetadataEditorModel()
     @FocusState private var canvasHasFocus: Bool
     
     // Crop settings (applied to current image)
@@ -214,7 +215,7 @@ struct ContentView: View {
                     Divider()
                         .padding(.vertical, 8)
 
-                    MetadataEditorView(imageData: currentDisplayImage)
+                    MetadataEditorView(imageData: currentDisplayImage, model: metadataEditor)
 
                     Divider()
                         .padding(.vertical, 8)
@@ -249,7 +250,7 @@ struct ContentView: View {
             }
             keyboardMonitor.onEnterPressed = {
                 print("⌨️ Enter-Handler von KeyboardMonitor aufgerufen")
-                batchManager.nextImage()
+                saveMetadataAndShowNextImage()
             }
             keyboardMonitor.startMonitoring()
         }
@@ -260,11 +261,22 @@ struct ContentView: View {
     }
     
     // MARK: - Computed Properties
-    
+
     var currentDisplayImage: ImageData? {
         return batchManager.currentImage?.imageData
     }
-    
+
+    /// Enter: saves pending metadata changes, then moves on.
+    /// Stays on the current image if the input is invalid or saving fails (the editor shows why).
+    private func saveMetadataAndShowNextImage() {
+        if let imageData = currentDisplayImage, !metadataEditor.saveIfChanged(for: imageData) {
+            return
+        }
+        batchManager.nextImage()
+        // Hand focus back to the image, so Space toggles overlays again
+        canvasHasFocus = true
+    }
+
     private func openFile() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.jpeg, .heic, .png, .tiff]

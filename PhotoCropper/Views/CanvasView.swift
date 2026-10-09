@@ -525,7 +525,11 @@ class CropCanvasView: NSView {
         attributedString.draw(in: labelRect)
     }
     
+    /// Lets the canvas take keyboard focus, so clicking the image ends text editing
+    override var acceptsFirstResponder: Bool { true }
+
     override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         let location = convert(event.locationInWindow, from: nil)
         dragHandle = handleAtPoint(location)
         
