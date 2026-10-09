@@ -92,6 +92,11 @@ struct MetadataEditorView: View {
                 .font(.caption)
                 .foregroundColor(.red)
         }
+        if let mismatchWarning = imageData.format.extensionMismatchWarning(for: imageData.url) {
+            Label(mismatchWarning, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundColor(.red)
+        }
         if imageData.format != .jpeg && imageData.format != .tiff {
             Text("This format carries no IPTC — only XMP and EXIF are written; the description also goes to EXIF UserComment.")
                 .font(.caption2)

@@ -10,6 +10,7 @@ import AppKit
 import CoreGraphics
 import ImageIO
 import Combine
+import UniformTypeIdentifiers
 
 // MARK: - Image Format
 
@@ -38,6 +39,30 @@ enum ImageFormat {
     /// Indicates whether this format supports lossless MCU-based cropping
     var supportsMCUCropping: Bool {
         return self == .jpeg
+    }
+
+    /// Types a matching file extension may conform to, empty for unknown formats
+    /// (public.heic does not conform to public.heif, so both are listed)
+    private var contentTypes: [UTType] {
+        switch self {
+        case .jpeg: return [.jpeg]
+        case .heic: return [.heic, .heif]
+        case .png: return [.png]
+        case .tiff: return [.tiff]
+        case .unknown: return []
+        }
+    }
+
+    /// Warning if the file extension of `url` does not match this (content-detected) format.
+    ///
+    /// exiftool picks the writer by file extension, so a JPEG named `.png` cannot be written.
+    func extensionMismatchWarning(for url: URL) -> String? {
+        guard !contentTypes.isEmpty else { return nil }
+        if let extensionType = UTType(filenameExtension: url.pathExtension),
+           contentTypes.contains(where: { extensionType.conforms(to: $0) }) {
+            return nil
+        }
+        return "File is a \(displayName) but has the extension .\(url.pathExtension) — rename it to a \(displayName) extension before writing metadata."
     }
 }
 

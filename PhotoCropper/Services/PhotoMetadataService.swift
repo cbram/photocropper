@@ -115,6 +115,9 @@ enum PhotoMetadataService {
         if let validationError = metadata.validationError {
             return .failure(.invalidInput(validationError))
         }
+        if let mismatchWarning = format.extensionMismatchWarning(for: imageURL) {
+            return .failure(.invalidInput(mismatchWarning))
+        }
         guard let exiftoolPath = ExiftoolPathResolver.findExiftoolPath() else {
             return .failure(.exiftoolNotFound)
         }
