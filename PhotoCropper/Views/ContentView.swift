@@ -547,6 +547,10 @@ struct ContentView: View {
     }
     
     private func switchToCustomRatio() {
+        // Already custom: updateCropBox keeps the text fields in sync; reassigning targetRatio
+        // would trigger onChange(targetRatio) and reset the crop box mid-drag
+        if case .custom = targetRatio { return }
+
         // Calculate custom ratio from current crop box
         let ratio = calculateImageAspectRatio(size: cropBox.size)
         
