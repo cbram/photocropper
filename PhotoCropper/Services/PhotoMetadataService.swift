@@ -186,14 +186,12 @@ enum PhotoMetadataService {
         process.standardOutput = outputPipe
         process.standardError = Pipe()
 
+        let data: Data
         do {
-            try process.run()
+            data = try process.runAndWaitWithoutRunLoop(readingOutputFrom: outputPipe)
         } catch {
             return .failure(.readFailed(error.localizedDescription))
         }
-        // Read before waiting, so a full pipe buffer cannot block exiftool
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
 
         guard process.terminationStatus == 0,
               let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],

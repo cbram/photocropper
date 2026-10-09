@@ -75,10 +75,7 @@ class MetadataReader {
         process.standardError = Pipe()
         
         do {
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let data = try process.runAndWaitWithoutRunLoop(readingOutputFrom: pipe)
             guard let output = String(data: data, encoding: .utf8) else {
                 return []
             }
@@ -118,10 +115,7 @@ class MetadataReader {
         process.standardError = Pipe()
         
         do {
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let data = try process.runAndWaitWithoutRunLoop(readingOutputFrom: pipe)
             guard let output = String(data: data, encoding: .utf8) else {
                 return []
             }
@@ -165,10 +159,7 @@ class MetadataReader {
         process.standardError = Pipe()
         
         do {
-            try process.run()
-            process.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let data = try process.runAndWaitWithoutRunLoop(readingOutputFrom: pipe)
             guard let output = String(data: data, encoding: .utf8) else {
                 return nil
             }
