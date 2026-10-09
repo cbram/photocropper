@@ -50,11 +50,7 @@ struct ControlsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Target Format Selection
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TARGET FORMAT")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                
+            CollapsibleSection(title: "TARGET FORMAT") {
                 Picker("Format", selection: Binding(
                     get: { ratioSelection },
                     set: { newValue in
@@ -103,11 +99,7 @@ struct ControlsView: View {
             Divider()
             
             // Cropping Mode
-            VStack(alignment: .leading, spacing: 8) {
-                Text("CROPPING MODE")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                
+            CollapsibleSection(title: "CROPPING MODE") {
                 Picker("Mode", selection: $cropMode) {
                     Text("MCU-Sensitive (Lossless)").tag(CropMode.mcuSensitive)
                     Text("Standard (Fallback)").tag(CropMode.standard)
@@ -118,11 +110,7 @@ struct ControlsView: View {
             Divider()
             
             // Overlay Guides
-            VStack(alignment: .leading, spacing: 8) {
-                Text("OVERLAY GUIDES")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                
+            CollapsibleSection(title: "OVERLAY GUIDES") {
                 Picker("Guide", selection: $activeOverlay) {
                     // None option
                     Text(OverlayGuide.none.displayName)
@@ -175,11 +163,7 @@ struct ControlsView: View {
             Divider()
             
             // Position & Fine-Tuning
-            VStack(alignment: .leading, spacing: 8) {
-                Text("POSITION & FINE-TUNING")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                
+            CollapsibleSection(title: "POSITION & FINE-TUNING") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Position X:")
@@ -300,11 +284,7 @@ struct ControlsView: View {
             Divider()
             
             // Quick Actions
-            VStack(alignment: .leading, spacing: 8) {
-                Text("QUICK ACTIONS")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                
+            CollapsibleSection(title: "QUICK ACTIONS") {
                 HStack(spacing: 8) {
                     Button("Center", action: onCenter)
                         .buttonStyle(.bordered)
@@ -345,3 +325,43 @@ struct ControlsView: View {
     }
 }
 
+/// Section with a clickable header that collapses or expands its content.
+/// The state is persisted per title so the layout survives image changes and app restarts.
+struct CollapsibleSection<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: () -> Content
+    
+    @AppStorage private var isExpanded: Bool
+    
+    init(title: String, @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.content = content
+        _isExpanded = AppStorage(wrappedValue: true, "controls.section.expanded.\(title)")
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .font(.caption.weight(.bold))
+                    Text(title)
+                        .font(.headline)
+                    Spacer()
+                }
+                .foregroundColor(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(isExpanded ? "expanded" : "collapsed")
+            
+            if isExpanded {
+                content()
+            }
+        }
+    }
+}

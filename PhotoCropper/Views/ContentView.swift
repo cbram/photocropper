@@ -213,7 +213,12 @@ struct ContentView: View {
                     
                     Divider()
                         .padding(.vertical, 8)
-                    
+
+                    MetadataEditorView(imageData: currentDisplayImage)
+
+                    Divider()
+                        .padding(.vertical, 8)
+
                     InfoPanel(imageData: currentDisplayImage)
                 }
             }
